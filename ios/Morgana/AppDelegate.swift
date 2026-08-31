@@ -24,13 +24,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window = UIWindow(frame: UIScreen.main.bounds)
 
     factory.startReactNative(
-      withModuleName: "PlantillaReactNative",
+      withModuleName: "Morgana",
       in: window,
       launchOptions: launchOptions
     )
 
     return true
   }
+
 }
 
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {

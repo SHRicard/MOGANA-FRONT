@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "PlantillaReactNative.app"
-               BlueprintName = "PlantillaReactNative"
-               ReferencedContainer = "container:PlantillaReactNative.xcodeproj">
+               BuildableName = "Morgana.app"
+               BlueprintName = "Morgana"
+               ReferencedContainer = "container:Morgana.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "PlantillaReactNativeTests.xctest"
-               BlueprintName = "PlantillaReactNativeTests"
-               ReferencedContainer = "container:PlantillaReactNative.xcodeproj">
+               BuildableName = "MorganaTests.xctest"
+               BlueprintName = "MorganaTests"
+               ReferencedContainer = "container:Morgana.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "PlantillaReactNative.app"
-            BlueprintName = "PlantillaReactNative"
-            ReferencedContainer = "container:PlantillaReactNative.xcodeproj">
+            BuildableName = "Morgana.app"
+            BlueprintName = "Morgana"
+            ReferencedContainer = "container:Morgana.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "PlantillaReactNative.app"
-            BlueprintName = "PlantillaReactNative"
-            ReferencedContainer = "container:PlantillaReactNative.xcodeproj">
+            BuildableName = "Morgana.app"
+            BlueprintName = "Morgana"
+            ReferencedContainer = "container:Morgana.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

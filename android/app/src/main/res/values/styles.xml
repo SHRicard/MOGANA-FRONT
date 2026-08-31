@@ -6,4 +6,19 @@
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     </style>
 
+    <!-- Theme de MainActivity. Solo cambia el windowBackground: el logo sobre
+         blanco, en lugar del fondo liso del sistema.
+
+         Es lo que tapa el hueco entre que se crea la ventana de la app y que
+         React pinta su primer frame (antes, ese tramo era la pantalla en
+         blanco). La vista de React es opaca y lo cubre apenas monta, así que
+         este fondo solo se ve durante el arranque.
+
+         En API < 31 este windowBackground ES la splash. En API 31+ la splash la
+         maneja el sistema (ver values-v31/styles.xml) y esto queda como el
+         relleno posterior. -->
+    <style name="AppTheme.Splash" parent="AppTheme">
+        <item name="android:windowBackground">@drawable/splash_screen</item>
+    </style>
+
 </resources>
