@@ -73,3 +73,8 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Variables de entorno locales (.env.example sí se versiona)
+.env
+.env.local
+.env.*.local

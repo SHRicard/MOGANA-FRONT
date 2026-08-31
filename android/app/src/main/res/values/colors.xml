@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo de la pantalla de arranque. Blanco en claro y oscuro: el logo es
+         violeta oscuro y no tiene contraste sobre fondos oscuros. -->
+    <color name="splash_background">#FFFFFF</color>
+</resources>

@@ -1,0 +1,14 @@
+<resources>
+
+    <!-- Android 12+ impone su propia splash screen: no se puede reemplazar, solo
+         configurar. El icono lo enmascara a un circulo, por eso splash_logo.xml
+         centra el logo dentro de un lienzo de 288dp. -->
+    <style name="AppTheme.Splash" parent="AppTheme">
+        <!-- Mismo drawable que en values/: la splash del sistema se apaga antes
+             de que React pinte, y sin esto ese tramo volvía a ser blanco. -->
+        <item name="android:windowBackground">@drawable/splash_screen</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+    </style>
+
+</resources>

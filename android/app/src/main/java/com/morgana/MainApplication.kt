@@ -1,4 +1,4 @@
-package com.plantillareactnative
+package com.morgana
 
 import android.app.Application
 import com.facebook.react.PackageList
