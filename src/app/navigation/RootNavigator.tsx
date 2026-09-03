@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -22,15 +22,33 @@ import {
   useSyncSession,
   VerificarCorreoScreen,
 } from '@/features/auth';
+import { AvisosDePagoScreen } from '@/features/avisos-de-pago';
+import {
+  BandejaDeMensajesScreen,
+  HiloDelClienteScreen,
+  MisMensajesScreen,
+} from '@/features/mensajes';
+import {
+  ComprobantesDelStoreScreen,
+  StoreDeComprobantesScreen,
+} from '@/features/store-comprobantes';
 import { CuentaClienteScreen, FacturaScreen, NuevaFacturaScreen } from '@/features/facturas';
 import {
+  ElegirFacturaScreen,
   InformarPagoScreen,
   MiFacturaScreen,
   MisAvisosScreen,
   MisComprasScreen,
   MisFacturasScreen,
+  useComprobantesCompartidos,
 } from '@/features/mi';
-import { MiCuentaScreen, PerfilBloqueadoScreen } from '@/features/perfil';
+import { EliminarCuentaScreen, MiCuentaScreen, PerfilBloqueadoScreen } from '@/features/perfil';
+import {
+  AuditoriaScreen,
+  CuentaDelSistemaScreen,
+  PanelSuperAdminScreen,
+  SistemaScreen,
+} from '@/features/super-admin';
 import { ClienteScreen, UsuariosScreen } from '@/features/usuarios';
 import { useAppSelector } from '@/store';
 import { useTheme, useThemeMode } from '@/theme';
@@ -62,6 +80,33 @@ export function RootNavigator() {
   // (tiene que dibujarse por encima de todo, incluidos los modales).
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
 
+  /**
+   * Si el contenedor ya puede recibir un `navigate`.
+   *
+   * Es estado y no un `navigationRef.isReady()` suelto porque hace falta que sea
+   * **reactivo**: el comprobante compartido puede estar esperando desde antes de
+   * que el contenedor se monte, y sin un cambio de estado que vuelva a correr el
+   * efecto nadie lo iría a buscar de nuevo.
+   */
+  const [navegacionLista, setNavegacionLista] = useState(false);
+  const alEstarLista = useCallback(() => setNavegacionLista(true), []);
+
+  /**
+   * La entrada por la **hoja de compartir** de Android
+   * (`docs/compartir_comprobante.md`).
+   *
+   * Va acá arriba, y no adentro de una pantalla, por dos motivos que el doc
+   * marca como obligatorios: la imagen puede llegar con la app **cerrada**
+   * (§2.2), y puede llegar **sin sesión** (§5.1). Este es el único punto que
+   * está montado en los dos casos.
+   *
+   * Solo abre la pantalla con sesión y con el perfil completo. Mientras falte
+   * alguna de las dos, abajo ya se está mostrando el login o el cartel del DNI
+   * y el comprobante espera guardado — que es exactamente lo que piden §5.1 y
+   * §5.2.
+   */
+  useComprobantesCompartidos(navigationRef, navegacionLista && isAuthenticated && !bloqueado);
+
   const openDesignSystem = useCallback(() => {
     if (navigationRef.isReady()) {
       navigationRef.navigate(RootRoutes.DESIGN_SYSTEM);
@@ -70,7 +115,7 @@ export function RootNavigator() {
 
   return (
     <View style={styles.root}>
-      <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+      <NavigationContainer ref={navigationRef} theme={navigationTheme} onReady={alEstarLista}>
         <StatusBar
           barStyle={mode === 'dark' ? 'light-content' : 'dark-content'}
           backgroundColor={theme.colors.background}
@@ -90,7 +135,22 @@ export function RootNavigator() {
               DNI queda cargado, el `estado` de la sesión cambia y el stack se
               reemplaza solo, sin que nadie llame a `navigate()`.
             */
-            <Stack.Screen name={RootRoutes.PERFIL_BLOQUEADO} component={PerfilBloqueadoScreen} />
+            <>
+              <Stack.Screen name={RootRoutes.PERFIL_BLOQUEADO} component={PerfilBloqueadoScreen} />
+
+              {/*
+                La única excepción a "esta pantalla es TODA la app", y la pide la
+                política de Google Play: el camino para borrar la cuenta tiene
+                que estar disponible igual (`README_FRONT_BAJA_DE_CUENTA.md` §2).
+
+                Es justo la persona que más chances tiene de querer irse —se
+                registró, nunca cargó el DNI y no puede hacer nada más— y los dos
+                endpoints de la baja le responden con la cuenta bloqueada. No
+                abre ninguna otra puerta: es una pantalla sola contra sus dos
+                endpoints, y termina en el login.
+              */}
+              <Stack.Screen name={RootRoutes.ELIMINAR_CUENTA} component={EliminarCuentaScreen} />
+            </>
           ) : isAuthenticated ? (
             // Fragment porque son varias screens hermanas y el ternario devuelve
             // una sola cosa. El navigator acepta `Screen`, `Group` y `Fragment`.
@@ -104,6 +164,33 @@ export function RootNavigator() {
                 va del stack junto con los tabs.
               */}
               <Stack.Screen name={RootRoutes.USUARIOS} component={UsuariosScreen} />
+
+              {/*
+                **El panel del sistema** (`docs/README_FRONT_SUPER_ADMIN.md`):
+                lo único que ve el super admin y no ve el administrador. Van las
+                cuatro juntas y en este orden porque así se recorren: panel →
+                tablero, y panel → historial → ficha de una cuenta.
+
+                ⚠️ El listado de todas las cuentas NO está acá: es
+                `RootRoutes.USUARIOS`, el mismo del apartado del administrador
+                —con el rol en cada fila y el filtro por rol prendido—, porque es
+                la misma tabla con una columna más.
+
+                ⚠️ Registrarlas para cualquier sesión iniciada es lo mismo que
+                se hace con el resto: esconder una pantalla por rol es UI, no
+                seguridad. La API contesta `403` a los cinco endpoints si el rol
+                no alcanza, y cada pantalla lo muestra en su propio cartel.
+              */}
+              <Stack.Screen
+                name={RootRoutes.PANEL_SUPER_ADMIN}
+                component={PanelSuperAdminScreen}
+              />
+              <Stack.Screen name={RootRoutes.SISTEMA} component={SistemaScreen} />
+              <Stack.Screen name={RootRoutes.AUDITORIA} component={AuditoriaScreen} />
+              <Stack.Screen
+                name={RootRoutes.CUENTA_DEL_SISTEMA}
+                component={CuentaDelSistemaScreen}
+              />
 
               {/*
                 El panel de administración y su primera sección. Van juntas y en
@@ -141,6 +228,52 @@ export function RootNavigator() {
               <Stack.Screen name={RootRoutes.TICKET_MES} component={TicketMesScreen} />
 
               {/*
+                La bandeja de avisos de pago
+                (`MORGANA-BACK/docs/flujo_comprobantes.md`). Es el otro lado de
+                `INFORMAR_PAGO` y de `ELEGIR_FACTURA`: por ahí el cliente avisa
+                que pagó y adjunta la captura, y acá alguien la mira contra el
+                resumen del banco y decide.
+
+                Va con las del panel porque desde ahí se entra —"hay algo que
+                resolver"— aunque confirmar termine anotando un cobro en una
+                factura. La API la tiene detrás del rol de administración.
+              */}
+              <Stack.Screen name={RootRoutes.AVISOS_DE_PAGO} component={AvisosDePagoScreen} />
+
+              {/*
+                El panel del store (`MORGANA-BACK/docs/flujo_comprobantes.md`
+                §5): cuánto ocupan las capturas que subieron los clientes y qué
+                se puede liberar. La lista cuelga del panel, no del menú: se
+                entra a mirar el total y de ahí se baja al detalle.
+
+                ⚠️ Desde acá se borran archivos y no se puede deshacer.
+              */}
+              <Stack.Screen
+                name={RootRoutes.STORE_COMPROBANTES}
+                component={StoreDeComprobantesScreen}
+              />
+              <Stack.Screen
+                name={RootRoutes.COMPROBANTES_DEL_STORE}
+                component={ComprobantesDelStoreScreen}
+              />
+
+              {/*
+                La bandeja de mensajes y el hilo de cada cliente
+                (`/admin/mensajes`).
+
+                ⚠️ La bandeja es **compartida**: leer un hilo lo deja leído para
+                todos los administradores, igual que la de avisos de pago.
+              */}
+              <Stack.Screen
+                name={RootRoutes.BANDEJA_MENSAJES}
+                component={BandejaDeMensajesScreen}
+              />
+              <Stack.Screen
+                name={RootRoutes.HILO_DEL_CLIENTE}
+                component={HiloDelClienteScreen}
+              />
+
+              {/*
                 El catálogo de especies (`docs/flujo_especies.md`). Va con las
                 del panel porque desde ahí se entra: es mantenimiento, no algo
                 que se toque todos los días — la especie que falta se crea
@@ -161,8 +294,33 @@ export function RootNavigator() {
               <Stack.Screen name={RootRoutes.MIS_FACTURAS} component={MisFacturasScreen} />
               <Stack.Screen name={RootRoutes.MI_FACTURA} component={MiFacturaScreen} />
               <Stack.Screen name={RootRoutes.INFORMAR_PAGO} component={InformarPagoScreen} />
+
+              {/*
+                La entrada por la hoja de compartir de Android
+                (`docs/compartir_comprobante.md`). Va con las de "lo mío" porque
+                termina en el mismo `POST` que `INFORMAR_PAGO`, pero es otra
+                pantalla: por aquella se entra desde una factura y solo falta el
+                monto; por esta se entra con la imagen y **sin nada más**.
+
+                Como modal: el cliente viene de su billetera y de acá vuelve a
+                donde estaba, no se mete en un stack del que después hay que
+                salir apretando "atrás" varias veces.
+              */}
+              <Stack.Screen
+                name={RootRoutes.ELEGIR_FACTURA}
+                component={ElegirFacturaScreen}
+                options={{ presentation: 'modal' }}
+              />
               <Stack.Screen name={RootRoutes.MIS_AVISOS} component={MisAvisosScreen} />
               <Stack.Screen name={RootRoutes.MIS_COMPRAS} component={MisComprasScreen} />
+
+              {/*
+                Mi hilo con el local (`/mi/mensajes`). Va con las pantallas de
+                "lo mío" y no con las del panel: es la misma conversación que el
+                administrador ve del otro lado, pero desde acá no hay a quién
+                elegir — el hilo es la persona.
+              */}
+              <Stack.Screen name={RootRoutes.MIS_MENSAJES} component={MisMensajesScreen} />
 
               {/*
                 La cuenta propia. También se abre desde el panel "Más", pero la
@@ -177,6 +335,15 @@ export function RootNavigator() {
                 queda guardado en el teléfono.
               */}
               <Stack.Screen name={RootRoutes.CONFIGURACION} component={ConfiguracionScreen} />
+
+              {/*
+                Eliminar mi cuenta. Se abre desde Mi cuenta, al final y separado
+                del resto, que es donde Google Play pide que esté
+                (`docs/README_FRONT_BAJA_DE_CUENTA.md` §6). La ve cualquier rol:
+                las cuentas de administración se comen un `409` al confirmar y la
+                pantalla lo explica, pero el camino tiene que existir igual.
+              */}
+              <Stack.Screen name={RootRoutes.ELIMINAR_CUENTA} component={EliminarCuentaScreen} />
 
               {/*
                 Escribir el código del correo. Va acá y no en el stack público

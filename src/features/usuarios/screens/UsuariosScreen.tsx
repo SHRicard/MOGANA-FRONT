@@ -61,9 +61,11 @@ const Separador = memo(function SeparadorComponent() {
  * (`docs/flujo_pagos.md`): una factura no existe sin la persona a la que se le
  * cobra, así que el flujo entero arranca eligiéndola acá.
  *
- * 🚧 Del resto sigue siendo **solo lectura**: crear, editar, desactivar y
- * cambiar el rol no tienen endpoint (el alta es `POST /auth/register`, que nace
- * con rol `cliente`, y los roles altos salen del seed del backend).
+ * 🚧 Crear, editar y desactivar una cuenta siguen sin existir del lado del
+ * backend: el alta es `POST /auth/register`, que nace con rol `cliente`. Lo que
+ * sí existe es **cambiarle el rol**, y vive en la ficha del panel del sistema
+ * (`docs/README_FRONT_SUPER_ADMIN.md` §6), a la que llegan las filas cuando
+ * quien mira es el super admin.
  */
 export function UsuariosScreen() {
   const theme = useTheme();
@@ -96,15 +98,32 @@ export function UsuariosScreen() {
    * Abrir la ficha. El nombre viaja como param —la fila ya lo tiene— para que la
    * pantalla de al lado tenga qué poner en el encabezado desde el primer frame,
    * mientras la cuenta se está trayendo.
+   *
+   * **Cuál ficha lo decide el rol de quien mira**, y no es un detalle: el
+   * listado del super admin trae también cuentas de administración, y la ficha
+   * del cliente no existe para ellas —`/admin/clientes/:id` contesta `404`—.
+   * Por eso él va a la del panel del sistema, que existe para las tres y es
+   * desde donde se mueve un rol; desde ahí se pasa a la del cliente cuando la
+   * cuenta es un cliente (`docs/README_FRONT_SUPER_ADMIN.md` §5).
    */
   const verCliente = useCallback(
     (usuario: Usuario) => {
+      const nombre = nombreUsuario(usuario);
+
+      if (listado.fichaDelSistema) {
+        navigation.navigate(RootRoutes.CUENTA_DEL_SISTEMA, {
+          cuentaId: usuario.id,
+          cuentaNombre: nombre,
+        });
+        return;
+      }
+
       navigation.navigate(RootRoutes.CLIENTE, {
         clienteId: usuario.id,
-        clienteNombre: nombreUsuario(usuario),
+        clienteNombre: nombre,
       });
     },
-    [navigation],
+    [navigation, listado.fichaDelSistema],
   );
 
   /**
@@ -113,8 +132,10 @@ export function UsuariosScreen() {
    * `UsuarioItem` en cada tecla del buscador.
    */
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<Usuario>) => <UsuarioItem usuario={item} onVer={verCliente} />,
-    [verCliente],
+    ({ item }: ListRenderItemInfo<Usuario>) => (
+      <UsuarioItem usuario={item} onVer={verCliente} todasConFicha={listado.fichaDelSistema} />
+    ),
+    [verCliente, listado.fichaDelSistema],
   );
 
   /**

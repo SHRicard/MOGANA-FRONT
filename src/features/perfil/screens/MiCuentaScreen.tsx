@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
 import MailWarning from 'lucide-react-native/icons/mail-warning';
+import Trash2 from 'lucide-react-native/icons/trash-2';
 import WifiOff from 'lucide-react-native/icons/wifi-off';
 // Ruta profunda y no el barrel `@/app/navigation`: ese barrel arrastra el
 // RootNavigator, que registra esta pantalla → ciclo en runtime.
@@ -61,6 +62,15 @@ export function MiCuentaScreen() {
 
   const verificarCorreo = useCallback(() => {
     navigation.navigate(RootRoutes.VERIFICAR_CORREO);
+  }, [navigation]);
+
+  /**
+   * Eliminar la cuenta (`docs/README_FRONT_BAJA_DE_CUENTA.md`). No borra nada
+   * desde acá: abre la pantalla que pregunta primero qué va a pasar y pide
+   * escribir la palabra.
+   */
+  const eliminarCuenta = useCallback(() => {
+    navigation.navigate(RootRoutes.ELIMINAR_CUENTA);
   }, [navigation]);
 
   return (
@@ -268,6 +278,42 @@ export function MiCuentaScreen() {
               disabled={!cuenta.hayCambios || cuenta.guardando}
               fullWidth
             />
+
+            {/*
+              ── Eliminar mi cuenta (`docs/README_FRONT_BAJA_DE_CUENTA.md` §6) ──
+
+              **Google Play lo exige**: si la app deja crear una cuenta, tiene
+              que dejar borrarla, con un camino intuitivo y a la vista. Las tres
+              cosas que pide y que acá se cumplen:
+
+               1. va **al final del perfil y separado del resto** —la línea de
+                  arriba es lo que lo separa—, no escondido bajo tres menús;
+               2. se llama **"Eliminar mi cuenta"** y no "Dar de baja": el
+                  revisor de Play busca esas palabras;
+               3. está **a un toque** de esta pantalla.
+
+              El botón no borra nada: abre la pantalla que primero explica qué va
+              a pasar y pide escribir la palabra de confirmación.
+            */}
+            <View style={styles.zonaPeligrosa}>
+              <Text variant="body" weight="semibold">
+                Eliminar mi cuenta
+              </Text>
+              <Text variant="caption" color="textMuted">
+                Se borran tus datos y no vas a poder volver a entrar. Te vamos a mostrar qué se
+                borra y qué queda guardado antes de hacer nada.
+              </Text>
+
+              <Button
+                label="Eliminar mi cuenta"
+                variant="danger"
+                onPress={eliminarCuenta}
+                disabled={cuenta.guardando}
+                leftIcon={<Trash2 size={ICON_SIZE} color={theme.colors.onError} />}
+                accessibilityLabel="Eliminar mi cuenta. Vas a ver qué se borra antes de confirmar."
+                fullWidth
+              />
+            </View>
           </ScrollView>
         )
       )}
@@ -304,6 +350,17 @@ const createStyles = (theme: Theme) =>
     centrado: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
     seccion: { gap: theme.spacing.md },
+
+    /**
+     * Lo que no se deshace, separado del resto por una línea: es lo que evita
+     * que "Eliminar mi cuenta" se lea como una fila más del formulario.
+     */
+    zonaPeligrosa: {
+      gap: theme.spacing.sm,
+      paddingTop: theme.spacing.lg,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
+    },
 
     aviso: {
       gap: theme.spacing.xs,

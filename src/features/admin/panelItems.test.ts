@@ -45,12 +45,15 @@ describe('PANEL_ITEMS', () => {
   it('ninguna fila promete una pantalla que no existe', () => {
     const conRuta = PANEL_ITEMS.filter((item) => item.route !== undefined);
     expect(conRuta.map((item) => item.id)).toEqual([
+      'avisos-de-pago',
+      'mensajes',
       'metricas',
       'metricas-clientes',
       'tendencia',
       'productos',
       'tickets',
       'especies',
+      'store-comprobantes',
     ]);
   });
 

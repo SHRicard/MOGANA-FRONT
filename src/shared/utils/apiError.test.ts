@@ -1,4 +1,9 @@
-import { esErrorDePerfilIncompleto, getApiErrorMessage, getApiErrorStatus } from './apiError';
+import {
+  esCuentaDadaDeBaja,
+  esErrorDePerfilIncompleto,
+  getApiErrorMessage,
+  getApiErrorStatus,
+} from './apiError';
 
 /** Arma un error de RTK Query con la forma que devuelve la API. */
 function apiError(status: number, data: unknown) {
@@ -91,5 +96,44 @@ describe('esErrorDePerfilIncompleto — los dos 403 que hay que separar', () => 
     expect(esErrorDePerfilIncompleto(apiError(403, {}))).toBe(false);
     expect(esErrorDePerfilIncompleto(apiError(403, '<html>Forbidden</html>'))).toBe(false);
     expect(esErrorDePerfilIncompleto(undefined)).toBe(false);
+  });
+});
+
+describe('esCuentaDadaDeBaja — los dos 401 que hay que separar', () => {
+  /** El mensaje exacto del backend (`README_FRONT_BAJA_DE_CUENTA.md` §5). */
+  const DADA_DE_BAJA =
+    'Esta cuenta está dada de baja. Si tenías algo pendiente, escribinos para resolverlo.';
+
+  /**
+   * Los cuatro caminos por los que se puede volver a intentar entrar contestan
+   * este mismo texto, así que alcanza con reconocerlo una vez.
+   */
+  it('reconoce el de la cuenta dada de baja', () => {
+    expect(esCuentaDadaDeBaja(apiError(401, { message: DADA_DE_BAJA }))).toBe(true);
+  });
+
+  /**
+   * La reacción es la contraria: al de sesión vencida se lo arregla volviendo a
+   * entrar, y al otro no lo arregla nadie desde el login.
+   */
+  it('NO confunde el 401 de sesión vencida', () => {
+    expect(
+      esCuentaDadaDeBaja(apiError(401, { message: 'Tu sesión expiró. Volvé a iniciar sesión.' })),
+    ).toBe(false);
+    expect(esCuentaDadaDeBaja(apiError(401, {}))).toBe(false);
+  });
+
+  it('no reacciona a otros status ni a una respuesta que no es JSON', () => {
+    expect(esCuentaDadaDeBaja(apiError(403, { message: DADA_DE_BAJA }))).toBe(false);
+    expect(esCuentaDadaDeBaja(apiError(401, '<html>Unauthorized</html>'))).toBe(false);
+    expect(esCuentaDadaDeBaja(undefined)).toBe(false);
+  });
+
+  /**
+   * El texto se sigue mostrando tal cual: lo que este chequeo decide es DÓNDE se
+   * muestra, no qué dice.
+   */
+  it('el mensaje que se muestra sigue siendo el del backend', () => {
+    expect(getApiErrorMessage(apiError(401, { message: DADA_DE_BAJA }))).toBe(DADA_DE_BAJA);
   });
 });

@@ -18,7 +18,12 @@ import type { SerializedError } from '@reduxjs/toolkit';
  * manda a volver atrás), y para eso está `getApiErrorStatus`.
  */
 
-type ApiError = FetchBaseQueryError | SerializedError | undefined;
+/**
+ * Lo que puede llegar como error desde RTK Query, en cualquiera de sus dos
+ * formas. Se exporta porque el `catch` de un `unwrap()` llega tipado como
+ * `unknown`, y sin este tipo cada llamador tendría que castear a mano.
+ */
+export type ApiError = FetchBaseQueryError | SerializedError | undefined;
 
 const DEFAULT_MESSAGE = 'Algo salió mal. Intentá de nuevo.';
 
@@ -81,6 +86,44 @@ export function esErrorDePerfilIncompleto(error: ApiError): boolean {
       : null;
 
   return parsed?.success ? parsed.data.message?.toUpperCase().includes('DNI') ?? false : false;
+}
+
+/**
+ * `true` si este `401` es el de una **cuenta dada de baja**
+ * (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5).
+ *
+ * Son cuatro caminos por los que alguien puede intentar volver a entrar —el
+ * token viejo, el login con contraseña, el de Google y el pedido de
+ * recuperación— y **los cuatro contestan el mismo texto**:
+ *
+ * ```json
+ * 401 { "message": "Esta cuenta está dada de baja. Si tenías algo pendiente, escribinos para resolverlo." }
+ * ```
+ *
+ * Hay que separarlo del `401` de siempre —*"tu sesión expiró, volvé a iniciar
+ * sesión"*— porque la reacción es la contraria: volver a iniciar sesión no va a
+ * andar nunca, y quien lee ese mensaje probablemente quiera arreglar su deuda y
+ * volver. Merece una pantalla con una salida, no el cartel de sesión vencida.
+ *
+ * ⚠️ **Se distingue por el texto**, que es lo único que da el contrato, igual que
+ * `esErrorDePerfilIncompleto`. Si el backend reescribe ese mensaje, esto deja de
+ * reconocerlo y la persona ve el `401` genérico: se degrada a lo de antes, no se
+ * rompe. El día que el contrato sume un código de error, se cambia acá y nada
+ * más.
+ */
+export function esCuentaDadaDeBaja(error: ApiError): boolean {
+  if (getApiErrorStatus(error) !== 401) {
+    return false;
+  }
+
+  const parsed =
+    error && isFetchBaseQueryError(error) && 'data' in error
+      ? errorBodySchema.safeParse(error.data)
+      : null;
+
+  return parsed?.success
+    ? parsed.data.message?.toLocaleLowerCase().includes('dada de baja') ?? false
+    : false;
 }
 
 /**

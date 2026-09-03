@@ -2,7 +2,9 @@ import {
   datosDePagoDe,
   destinoDeAviso,
   esPagoResuelto,
+  llevaAAlgunLado,
   notificacionesPaginaSchema,
+  PantallasDeAviso,
   notificacionSchema,
   sinLeer,
   TiposNotificacion,
@@ -114,6 +116,10 @@ const avisoDePago = {
     monto: 28500,
     fecha: '2026-08-21',
   },
+  destino: {
+    pantalla: 'una_factura',
+    id: 'ce5f8070-0000-4000-8000-000000000000',
+  },
   leidaEn: null,
   createdAt: '2026-08-21T20:29:12.920Z',
 };
@@ -160,39 +166,90 @@ describe('esPagoResuelto', () => {
 });
 
 describe('destinoDeAviso', () => {
-  it('los de pago resuelto llevan a la factura de la que hablan', () => {
+  /**
+   * ⚠️ **Sale del `destino` que manda el backend, no del `tipo`.** Antes se
+   * deducía acá con un `switch` y el doc pide expresamente que no: duplicado del
+   * lado de la app, ese mapeo se desactualiza el día que se agrega un tipo nuevo
+   * y nadie se entera hasta que un clic no lleva a ningún lado.
+   */
+  it('devuelve el destino que mandó el backend', () => {
     const aviso = notificacionSchema.parse(avisoDePago);
     expect(destinoDeAviso(aviso)).toEqual({
-      destino: 'factura',
-      facturaId: avisoDePago.datos.facturaId,
+      pantalla: PantallasDeAviso.UNA_FACTURA,
+      id: avisoDePago.datos.facturaId,
     });
   });
 
-  it('el de deuda lleva a las vencidas', () => {
-    const deuda = notificacionSchema.parse(respuesta.datos[0]);
-    expect(destinoDeAviso(deuda)).toEqual({ destino: 'facturas-vencidas' });
+  /**
+   * La prueba de que NO se mira el tipo: el mismo payload con otro `tipo` sigue
+   * llevando a donde dice `destino`.
+   */
+  it('no mira el tipo del aviso', () => {
+    const raro = notificacionSchema.parse({ ...avisoDePago, tipo: 'promocion' });
+    expect(destinoDeAviso(raro)?.pantalla).toBe(PantallasDeAviso.UNA_FACTURA);
   });
 
-  /**
-   * Tres no llevan a ningún lado, y cada uno por su motivo: un anuncio no habla
-   * de nada en particular, `pago_informado` es del administrador —cuya bandeja
-   * todavía no existe en la app— y un tipo desconocido se lee igual, pero
-   * adivinarle un destino sería peor que no moverse.
-   */
-  it('el anuncio, el aviso del administrador y un tipo desconocido no llevan a nada', () => {
+  /** El aviso del store lleva al panel del almacenamiento. */
+  it('el aviso de store lleno lleva al panel del store', () => {
+    const lleno = notificacionSchema.parse({
+      ...avisoDePago,
+      tipo: TiposNotificacion.STORE_LLENO,
+      destino: { pantalla: PantallasDeAviso.STORE_DE_COMPROBANTES, id: null },
+    });
+
+    expect(destinoDeAviso(lleno)).toEqual({
+      pantalla: PantallasDeAviso.STORE_DE_COMPROBANTES,
+      id: null,
+    });
+  });
+
+  /** Un anuncio es texto y nada más: no hay nada que abrir. */
+  it('sin destino no lleva a ningún lado', () => {
     const anuncio = notificacionSchema.parse({
       ...avisoDePago,
       tipo: TiposNotificacion.ANUNCIO,
       datos: null,
+      destino: null,
     });
-    const delAdministrador = notificacionSchema.parse({
-      ...avisoDePago,
-      tipo: TiposNotificacion.PAGO_INFORMADO,
-    });
-    const desconocido = notificacionSchema.parse({ ...avisoDePago, tipo: 'promocion' });
 
     expect(destinoDeAviso(anuncio)).toBeNull();
-    expect(destinoDeAviso(delAdministrador)).toBeNull();
-    expect(destinoDeAviso(desconocido)).toBeNull();
+  });
+
+  /**
+   * ⚠️ Los avisos guardados **antes de que este campo existiera** llegan sin
+   * `destino`. Se leen igual, solo no navegan.
+   */
+  it('un aviso viejo sin el campo no rompe', () => {
+    const { destino: _, ...viejo } = avisoDePago;
+    expect(destinoDeAviso(notificacionSchema.parse(viejo))).toBeNull();
+  });
+
+  /**
+   * ⚠️ **`pantalla` se valida como texto libre.** Una versión más nueva del
+   * backend puede mandar una que esta build no conoce, y eso no puede tirar
+   * abajo la lista: el aviso se lee igual y la pantalla no navega.
+   */
+  it('una pantalla que la app no conoce se lee sin romperse', () => {
+    const futuro = notificacionSchema.parse({
+      ...avisoDePago,
+      destino: { pantalla: 'mis_puntos', id: null },
+    });
+
+    expect(destinoDeAviso(futuro)?.pantalla).toBe('mis_puntos');
+  });
+});
+
+describe('llevaAAlgunLado', () => {
+  /**
+   * Es lo que decide si la fila se dibuja **tocable**: un aviso que parece un
+   * botón y no hace nada se siente roto.
+   */
+  it('con destino, sí', () => {
+    expect(llevaAAlgunLado(notificacionSchema.parse(avisoDePago))).toBe(true);
+  });
+
+  it('sin destino, no', () => {
+    const anuncio = notificacionSchema.parse({ ...avisoDePago, destino: null });
+    expect(llevaAAlgunLado(anuncio)).toBe(false);
   });
 });

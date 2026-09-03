@@ -13,7 +13,7 @@ export function RegisterScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { control, isSubmitting, submitError, onSubmit } = useRegister();
+  const { control, isSubmitting, submitError, emailTomado, onSubmit } = useRegister();
   // Mismo endpoint que en login: si el email no existe, el backend crea la cuenta.
   const google = useGoogleLogin();
 
@@ -33,6 +33,27 @@ export function RegisterScreen() {
       }
     >
       <FormErrorBanner message={submitError} />
+
+      {/*
+        El `409` de "ese email ya está registrado" tiene dos causas que la persona
+        no puede distinguir —y el backend no las distingue a propósito—: o ya
+        tiene cuenta, o ese correo quedó tomado por una cuenta dada de baja con
+        deuda (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5). Las dos salidas están
+        acá para no dejarla golpeando contra el mismo error.
+      */}
+      {emailTomado && (
+        <View style={styles.salidas}>
+          <Text variant="caption" color="textMuted">
+            ¿Problemas para entrar? Si ya tenías cuenta, recuperá tu contraseña. Si te diste de
+            baja y quedó algo pendiente, escribinos y lo resolvemos.
+          </Text>
+          <Link
+            label="Recuperar mi contraseña"
+            variant="caption"
+            onPress={() => navigation.navigate('ForgotPassword')}
+          />
+        </View>
+      )}
 
       <EmailField control={control} returnKeyType="next" />
 
@@ -98,6 +119,9 @@ export function RegisterScreen() {
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
+    /** Las dos salidas del 409, juntas y separadas del formulario. */
+    salidas: { gap: theme.spacing.xs, alignItems: 'flex-start' },
+
     footer: {
       flexDirection: 'row',
       alignItems: 'center',

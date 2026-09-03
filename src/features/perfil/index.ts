@@ -14,11 +14,29 @@ export { PerfilBloqueadoScreen } from './screens/PerfilBloqueadoScreen';
 /** Ver y corregir los datos propios (`docs/flujo_mi_cuenta.md`). */
 export { MiCuentaScreen } from './screens/MiCuentaScreen';
 
-export { useCompletarPerfil, useMiCuenta } from './hooks';
-export type { CompletarPerfil, MiCuenta } from './hooks';
+/**
+ * **Eliminar mi cuenta** (`docs/README_FRONT_BAJA_DE_CUENTA.md`). Existe porque
+ * Google Play lo exige: si la app deja crear una cuenta, tiene que dejar
+ * borrarla. Se abre desde Mi cuenta y también desde el cartel del DNI — los dos
+ * endpoints responden con la cuenta bloqueada.
+ */
+export { EliminarCuentaScreen } from './screens/EliminarCuentaScreen';
+
+export { useCompletarPerfil, useMiCuenta, useBajaDeCuenta } from './hooks';
+export type { CompletarPerfil, MiCuenta, BajaDeCuenta } from './hooks';
 
 export { completarPerfilSchema, aActualizarPerfilPayload, esCallejonSinSalida } from './types';
 export { perfilSchema, miCuentaSchema, aCambiosDePerfil, aValoresDeFormulario } from './types';
 export { motivoCampoFijo, CamposDelPerfil, esTelefonoValido } from './types';
 export type { CompletarPerfilFormValues, ActualizarPerfilPayload } from './types';
 export type { Perfil, CampoFijo, CampoDelPerfil, MiCuentaFormValues } from './types';
+
+export { vistaPreviaDeBajaSchema, bajaHechaSchema, datoRetenidoSchema } from './types';
+export { CaminosDeBaja, confirmacionCoincide, quedanDatos } from './types';
+export type {
+  BajaHecha,
+  CaminoDeBaja,
+  DarDeBajaPayload,
+  DatoRetenido,
+  VistaPreviaDeBaja,
+} from './types';

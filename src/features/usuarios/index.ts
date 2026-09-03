@@ -10,7 +10,8 @@ export { ClienteScreen } from './screens/ClienteScreen';
 
 export { usuarioSchema, usuariosPaginaSchema } from './types';
 export { ROL_LABEL, rolLabel, USUARIOS_LIMITE, USUARIOS_DEBOUNCE_MS } from './types';
-export { esFacturable, identificadorUsuario, nombreUsuario, sinFiado } from './types';
+export { esFacturable, faltaDni, identificadorUsuario, nombreUsuario, sinFiado } from './types';
+export { estaDadaDeBaja } from './types';
 export { bloquearFiadoSchema, aBloquearFiadoPayload, MAX_LARGO_MOTIVO_SIN_FIADO } from './types';
 
 export type { Usuario, UsuariosPagina, ListarClientesParams, ListarUsuariosParams } from './types';

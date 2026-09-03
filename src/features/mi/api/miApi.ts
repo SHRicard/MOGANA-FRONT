@@ -1,5 +1,6 @@
 import { baseApi } from '@/services/api';
 import {
+  aCuerpoConComprobante,
   miCuentaSchema,
   miFacturaSchema,
   misAvisosPaginaSchema,
@@ -74,6 +75,9 @@ export const miApi = baseApi.injectEndpoints({
           hasta: params?.hasta,
           pagina: params?.pagina,
           limite: params?.limite,
+          // Solo cuando se pide: mandar `soloImpagas=false` sería decir algo que
+          // el resto de las pantallas no quiere decir.
+          soloImpagas: params?.soloImpagas ? true : undefined,
         },
       }),
       responseSchema: misFacturasPaginaSchema,
@@ -139,10 +143,21 @@ export const miApi = baseApi.injectEndpoints({
      * y refrescarla mostraría el mismo número y haría parecer que falló (§12).
      */
     informarPago: builder.mutation<MiAvisoDePago, InformarPagoPayload>({
-      query: ({ facturaId, datos }) => ({
+      /*
+        Un endpoint, dos cuerpos (`docs/compartir_comprobante.md` §1). Con
+        imagen sale `multipart/form-data`; sin imagen, el JSON de siempre. Al
+        backend le da igual de dónde salió la foto.
+
+        ⚠️ **Ninguno de los dos pone `Content-Type` a mano**, y no es un olvido:
+        el multipart lo tiene que escribir el runtime para incluir el `boundary`.
+        Forzarlo es la causa número uno del `400` de "falta el comprobante"
+        (§4, trampa 2). `fetchBaseQuery` tampoco lo agrega solo: solo pone el de
+        JSON cuando el body es un objeto plano, y un `FormData` no lo es.
+      */
+      query: ({ facturaId, datos, comprobante }) => ({
         url: `/mi/facturas/${facturaId}/informar-pago`,
         method: 'POST',
-        body: datos,
+        body: comprobante ? aCuerpoConComprobante(datos, comprobante) : datos,
       }),
       responseSchema: miAvisoDePagoSchema,
       invalidatesTags: (_result, _error, { facturaId }) => [

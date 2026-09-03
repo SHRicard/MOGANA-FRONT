@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAppDispatch } from '@/store';
-import { getApiErrorMessage } from '@/shared/utils';
+import { getApiErrorMessage, getApiErrorStatus } from '@/shared/utils';
 import { useRegisterMutation } from '../api';
 import { setCredentials } from '../store';
 import { registerSchema, type RegisterFormValues } from '../types';
@@ -41,6 +41,17 @@ export function useRegister() {
     errors: formState.errors,
     isSubmitting: isLoading,
     submitError: getApiErrorMessage(error),
+    /**
+     * `409`: *"Ese email ya está registrado."*
+     *
+     * ⚠️ **También lo contesta un correo que quedó tomado por una cuenta dada de
+     * baja con deuda** (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5). Es a
+     * propósito que el mensaje sea el mismo —no confirma que esa cuenta esté
+     * dada de baja a cualquiera que tipee un correo ajeno—, pero deja a la
+     * persona sin saber qué hacer. Por eso la pantalla, con este `true`, le
+     * ofrece las dos salidas que sí sirven.
+     */
+    emailTomado: getApiErrorStatus(error) === 409,
     onSubmit,
   };
 }

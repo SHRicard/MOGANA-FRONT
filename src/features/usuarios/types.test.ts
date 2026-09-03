@@ -4,6 +4,7 @@ import {
   bloquearFiadoSchema,
   cargarDniSchema,
   esFacturable,
+  estaDadaDeBaja,
   faltaDni,
   nombreUsuario,
   rolLabel,
@@ -238,5 +239,34 @@ describe('cargarDniSchema — cargar o corregir el documento desde el mostrador'
       dni: '38180903',
       motivo: 'Faltaba un dígito',
     });
+  });
+});
+
+describe('estaDadaDeBaja — la cuenta que pidió borrarse debiendo plata', () => {
+  /**
+   * Sigue en el listado y en el tablero porque hay algo que cobrarle, pero **ya
+   * no entra a la app** (`docs/README_FRONT_BAJA_DE_CUENTA.md` §8).
+   */
+  it('es true solo con la fecha cargada', () => {
+    expect(estaDadaDeBaja({ dadaDeBajaEn: '2026-09-02T18:54:32.303Z' })).toBe(true);
+    expect(estaDadaDeBaja({ dadaDeBajaEn: null })).toBe(false);
+  });
+
+  /** Sin el campo —una respuesta vieja— la respuesta es que no: es el 99% de las cuentas. */
+  it('sin el campo, la cuenta está viva', () => {
+    expect(estaDadaDeBaja({})).toBe(false);
+  });
+
+  /**
+   * Son tres marcas distintas y se pueden dar juntas: al bloqueado le falta un
+   * dato, al que no se le fía es una advertencia del mostrador, y este ya no
+   * vuelve.
+   */
+  it('no se mezcla con el bloqueo del DNI ni con el fiado', () => {
+    const baja = { dadaDeBajaEn: '2026-09-02T18:54:32.303Z', estado: 'activo', seLeFia: true };
+
+    expect(estaDadaDeBaja(baja)).toBe(true);
+    expect(faltaDni(baja)).toBe(false);
+    expect(sinFiado(baja)).toBe(false);
   });
 });

@@ -74,6 +74,46 @@ export const RootRoutes = {
    */
   PANEL_ADMIN: 'PanelAdmin',
   /**
+   * **El panel del sistema**: la puerta a lo que solo ve el super admin
+   * (`docs/README_FRONT_SUPER_ADMIN.md`).
+   *
+   * ⚠️ No es el panel del negocio. El super admin puede todo lo que puede el
+   * administrador —facturación, métricas, mensajes— y eso vive en
+   * `PANEL_ADMIN`, con los mismos endpoints. Acá está lo otro: el estado del
+   * sistema, todas las cuentas, los cambios de rol y su historial. Por eso este
+   * panel también ofrece la entrada al del negocio: son las dos mitades de lo
+   * que ve el dueño.
+   */
+  PANEL_SUPER_ADMIN: 'PanelSuperAdmin',
+  /**
+   * El tablero del sistema (`README_FRONT_SUPER_ADMIN.md` §3): cuántas cuentas
+   * hay, quién entró, cuánto ocupa el store y en qué estado está el servidor.
+   *
+   * ⚠️ **Sin un solo número de plata, a propósito**: lo facturado y lo cobrado
+   * los contesta el panel del negocio, y dos pantallas con los mismos números
+   * calculados distinto terminan siempre en dos números que no coinciden.
+   */
+  SISTEMA: 'Sistema',
+  /**
+   * La ficha de una cuenta **en el panel del sistema** (§5 y §6): quién le tocó
+   * qué y por qué, y a qué rol puede pasar.
+   *
+   * ⚠️ No es `CLIENTE`, que es la ficha del apartado del administrador: aquella
+   * existe solo para los clientes —pedir por id la de un administrador da
+   * `404`— y es donde están el fiado, el DNI y el botón de facturar. Esta
+   * existe para las tres, y es la única desde la que se mueve un rol. Las dos se
+   * enlazan.
+   */
+  CUENTA_DEL_SISTEMA: 'CuentaDelSistema',
+  /**
+   * El historial de los cambios de rol (§7).
+   *
+   * **Es de solo lectura y no por falta de tiempo**: no existe el endpoint para
+   * escribir ni para borrar, y es la mitad del punto — un registro que la app
+   * puede reescribir no prueba nada.
+   */
+  AUDITORIA: 'Auditoria',
+  /**
    * Las métricas del negocio (`docs/flujo_metricas.md`): cuánta plata hay en la
    * calle, qué entró en el mes y quién no paga.
    *
@@ -124,6 +164,44 @@ export const RootRoutes = {
    */
   TICKETS: 'Tickets',
   /**
+   * **La bandeja de avisos de pago**: los clientes que dijeron que pagaron y
+   * todavía nadie resolvió (`MORGANA-BACK/docs/flujo_comprobantes.md`).
+   *
+   * Es el otro lado de `INFORMAR_PAGO` y de `ELEGIR_FACTURA`: por ahí el cliente
+   * avisa y adjunta la captura, y acá alguien la mira contra el resumen del
+   * banco y decide.
+   *
+   * ⚠️ Va en el panel y no con las facturas aunque termine anotando un cobro: se
+   * entra por "hay algo que resolver", no por una factura concreta.
+   */
+  AVISOS_DE_PAGO: 'AvisosDePago',
+  /**
+   * **El panel del store de comprobantes**: cuánto ocupan las capturas que
+   * subieron los clientes y qué se puede liberar
+   * (`MORGANA-BACK/docs/flujo_comprobantes.md` §5).
+   *
+   * ⚠️ Desde acá se **borran archivos y no se puede deshacer**. Nada de esto lo
+   * ve el cliente.
+   */
+  STORE_COMPROBANTES: 'StoreComprobantes',
+  /**
+   * El listado del store, uno por uno: para revisar antes de tirar, y para
+   * borrar alguno suelto (§5.2 y §5.5). Se llega desde el panel de arriba.
+   */
+  COMPROBANTES_DEL_STORE: 'ComprobantesDelStore',
+  /**
+   * **La bandeja de mensajes del panel**: un renglón por cliente que escribió.
+   *
+   * ⚠️ Es **compartida** entre todos los administradores. Leer un hilo lo deja
+   * leído para todos, igual que la bandeja de avisos de pago.
+   */
+  BANDEJA_MENSAJES: 'BandejaMensajes',
+  /**
+   * El hilo de **un** cliente, desde el panel. Se llega desde la bandeja o
+   * desde el aviso de la campanita, que trae el id del cliente.
+   */
+  HILO_DEL_CLIENTE: 'HiloDelCliente',
+  /**
    * El ticket de un mes: la foto completa de ese período
    * (`docs/flujo_metricas.md` §5.2). Se llega tocando un mes del índice, y el
    * "atrás" devuelve ahí.
@@ -167,6 +245,22 @@ export const RootRoutes = {
    */
   INFORMAR_PAGO: 'InformarPago',
   /**
+   * **A qué factura corresponde el comprobante que compartiste**
+   * (`docs/compartir_comprobante.md` §3).
+   *
+   * Es la puerta de entrada de la hoja de compartir de Android: el cliente paga
+   * en su billetera, toca "Compartir comprobante", elige Morgana y cae acá.
+   *
+   * ⚠️ No es `INFORMAR_PAGO`, aunque las dos terminen en el mismo `POST`. Por
+   * aquella se entra desde una factura y lo único que falta es el monto; por
+   * esta se entra **con la imagen y sin nada más**, así que hay que elegir la
+   * factura primero. Son dos pantallas porque son dos órdenes distintos.
+   *
+   * Sin params: el comprobante lo levanta del store, que es donde lo dejó el
+   * módulo nativo antes de que se supiera si había sesión.
+   */
+  ELEGIR_FACTURA: 'ElegirFactura',
+  /**
    * **Mis avisos de pago**: en qué quedó cada uno
    * (`docs/user_cliente_flujo.md` §9).
    *
@@ -183,6 +277,14 @@ export const RootRoutes = {
    */
   MIS_COMPRAS: 'MisCompras',
   /**
+   * **Mis mensajes con el local.** Uno solo y para siempre: el cliente no elige
+   * con quién habla, así que la ruta nunca lleva un id de hilo.
+   *
+   * Acepta un `sobre` opcional para entrar hablando de una factura o de un aviso
+   * de pago concretos.
+   */
+  MIS_MENSAJES: 'MisMensajes',
+  /**
    * La cuenta propia: ver y corregir los datos (`docs/flujo_mi_cuenta.md`).
    *
    * Vive en el stack RAÍZ y no en un tab porque se abre desde el panel "Más",
@@ -190,6 +292,20 @@ export const RootRoutes = {
    * edita la suya.
    */
   MI_CUENTA: 'MiCuenta',
+  /**
+   * **Eliminar mi cuenta** (`docs/README_FRONT_BAJA_DE_CUENTA.md`).
+   *
+   * No es una idea de producto: **Google Play lo exige** —si la app deja crear
+   * una cuenta, tiene que dejar borrarla—, y pide que el camino esté a la vista
+   * y a un toque del perfil. Por eso se abre desde Mi cuenta, al final.
+   *
+   * ⚠️ **También se registra para la cuenta bloqueada**, que normalmente no
+   * tiene ninguna otra ruta: esa persona —la que se registró y nunca cargó el
+   * DNI— es justamente la que más chances tiene de querer irse, y los dos
+   * endpoints le responden igual. Es lo único, además del cartel del DNI, que
+   * puede abrir.
+   */
+  ELIMINAR_CUENTA: 'EliminarCuenta',
   /**
    * Ajustes de la app: cómo se ve en este teléfono.
    *

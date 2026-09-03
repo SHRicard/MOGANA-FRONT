@@ -8,9 +8,11 @@ import WifiOff from 'lucide-react-native/icons/wifi-off';
 // Rutas profundas y no el barrel `@/app/navigation`: ese barrel arrastra el
 // RootNavigator, que registra esta pantalla → ciclo en runtime.
 import { RootRoutes } from '@/app/navigation/routes';
+import { ContextosDeMensaje } from '@/features/mensajes';
 import type { RootStackParamList } from '@/app/navigation/types';
 import { useRefrescar } from '@/shared/hooks';
 import { Button } from '@/shared/ui/atoms/Button';
+import { Link } from '@/shared/ui/atoms/Link';
 import { EmptyState, EMPTY_STATE_ICON_SIZE } from '@/shared/ui/atoms/EmptyState';
 import { Text } from '@/shared/ui/atoms/Text';
 import { formatFecha, formatMonto } from '@/shared/utils';
@@ -69,6 +71,28 @@ export function MiFacturaScreen() {
     navigation.navigate(RootRoutes.INFORMAR_PAGO, {
       facturaId: detalle.factura.id,
       numero: detalle.factura.numero,
+    });
+  }, [navigation, detalle.factura]);
+
+  /**
+   * Preguntar por ESTA factura.
+   *
+   * El contexto se arma acá y no en el chat a propósito: el backend exige que la
+   * factura sea de quien escribe —mandar la de otro es un `400`—, así que solo
+   * puede nacer en una pantalla que ya la está mostrando. La etiqueta se escribe
+   * igual que la del backend, para que el chip se vea igual en un mensaje recién
+   * mandado y en uno que vuelve del servidor.
+   */
+  const preguntar = useCallback(() => {
+    if (!detalle.factura) {
+      return;
+    }
+    navigation.navigate(RootRoutes.MIS_MENSAJES, {
+      sobre: {
+        tipo: ContextosDeMensaje.FACTURA,
+        id: detalle.factura.id,
+        etiqueta: `Factura #${detalle.factura.numero}`,
+      },
     });
   }, [navigation, detalle.factura]);
 
@@ -252,6 +276,17 @@ export function MiFacturaScreen() {
             `400`, y no mostrar el botón es mejor que mostrarlo y fallar.
           */}
           {detalle.sePuedeAvisar && <Button label="Avisar que pagué" onPress={avisar} fullWidth />}
+
+          {/*
+            La salida para lo que el formulario de avisar no cubre: el pago que
+            no aparece, el importe que no cierra, la fecha equivocada. Va abajo
+            del botón y como enlace, no como botón: es la segunda opción, y
+            competir con "Avisar que pagué" mandaría a escribir a quien
+            simplemente tenía que informar un pago.
+          */}
+          <View style={styles.preguntar}>
+            <Link label="Preguntar por esta factura" variant="small" onPress={preguntar} />
+          </View>
         </ScrollView>
       )}
     </View>
@@ -261,6 +296,8 @@ export function MiFacturaScreen() {
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.colors.background },
+
+    preguntar: { alignItems: 'center', paddingTop: theme.spacing.sm },
 
     header: {
       flexDirection: 'row',

@@ -1,8 +1,12 @@
 import { baseApi } from '@/services/api';
 import {
+  borradaSchema,
+  borradasSchema,
   leerTodasSchema,
   notificacionesPaginaSchema,
   notificacionSchema,
+  type BorradaRespuesta,
+  type BorradasRespuesta,
   type LeerTodasRespuesta,
   type ListarNotificacionesParams,
   type Notificacion,
@@ -95,8 +99,53 @@ export const notificacionesApi = baseApi.injectEndpoints({
       responseSchema: leerTodasSchema,
       invalidatesTags: [{ type: 'Notificacion', id: 'LIST' }],
     }),
+
+    /**
+     * `DELETE /api/notificaciones/:id` — saca un aviso de la campanita.
+     *
+     * Es idempotente: borrarlo dos veces devuelve lo mismo y no mueve la fecha
+     * del primer borrado. El de otra persona da `404` —igual que uno que no
+     * existe—, así que nadie se entera de que ese id existe.
+     *
+     * ⚠️ **Es un borrado blando**: la fila queda en la base y deja de aparecer.
+     * Un aviso es la prueba de qué se le comunicó a alguien y cuándo —*"no
+     * tomamos tu pago del 3 porque el comprobante no se leía"* es, tres semanas
+     * después, la única explicación de una deuda que sigue figurando—, así que
+     * lo que se borra es de su vista, no del registro.
+     *
+     * ⚠️ **No se saca la fila a mano de la cache**: se invalida y se vuelve a
+     * pedir. El `noLeidas` que vuelve ya es el número correcto del globito, y
+     * calcularlo acá sería adivinar —un aviso sin leer que se borra también
+     * queda marcado como leído del lado del backend—.
+     */
+    borrarNotificacion: builder.mutation<BorradaRespuesta, string>({
+      query: (id) => ({ url: `/notificaciones/${id}`, method: 'DELETE' }),
+      responseSchema: borradaSchema,
+      invalidatesTags: [{ type: 'Notificacion', id: 'LIST' }],
+    }),
+
+    /**
+     * `DELETE /api/notificaciones` — **vacía la campanita entera.**
+     *
+     * Solo las de quien pregunta, y solo las que seguían ahí: llamarlo dos veces
+     * devuelve `0` la segunda, que es la respuesta correcta y no un error.
+     *
+     * ⚠️ **No hay forma de deshacerlo desde la app.** La fila queda en la base,
+     * pero no hay endpoint para traerla de vuelta. Por eso la pantalla pregunta
+     * antes.
+     */
+    borrarTodasLasNotificaciones: builder.mutation<BorradasRespuesta, void>({
+      query: () => ({ url: '/notificaciones', method: 'DELETE' }),
+      responseSchema: borradasSchema,
+      invalidatesTags: [{ type: 'Notificacion', id: 'LIST' }],
+    }),
   }),
 });
 
-export const { useListarNotificacionesQuery, useMarcarLeidaMutation, useLeerTodasMutation } =
-  notificacionesApi;
+export const {
+  useListarNotificacionesQuery,
+  useMarcarLeidaMutation,
+  useLeerTodasMutation,
+  useBorrarNotificacionMutation,
+  useBorrarTodasLasNotificacionesMutation,
+} = notificacionesApi;

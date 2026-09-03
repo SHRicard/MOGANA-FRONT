@@ -1,7 +1,11 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import IdCard from 'lucide-react-native/icons/id-card';
+// Ruta profunda y no el barrel `@/app/navigation`: ese barrel arrastra el
+// RootNavigator, que registra esta pantalla → ciclo en runtime.
+import { RootRoutes } from '@/app/navigation/routes';
 import { useRefrescar } from '@/shared/hooks';
 import { Button } from '@/shared/ui/atoms/Button';
 import { ControlledInputField } from '@/shared/ui/atoms/ControlledInputField';
@@ -34,6 +38,12 @@ const CIRCULO = 56;
  *     la persona enfrente; el gesto vuelve a pedir `/users/me` y destraba.
  *  3. **Cerrar sesión.** Para los dos `409` que no se pueden resolver desde acá:
  *     sin esta salida, lo que queda es desinstalar la app.
+ *  4. **Eliminar la cuenta.** La que pide Google Play
+ *     (`docs/README_FRONT_BAJA_DE_CUENTA.md` §2), y no es un trámite: quien se
+ *     registró y nunca cargó el DNI es justamente el que más chances tiene de
+ *     querer irse. Los dos endpoints de la baja responden con la cuenta
+ *     bloqueada, así que el camino está disponible igual — es lo único, además
+ *     de este cartel, que el stack le registra.
  *
  * Sin lógica de negocio: todo sale de `useCompletarPerfil`.
  */
@@ -42,8 +52,20 @@ export function PerfilBloqueadoScreen() {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  const navigation = useNavigation();
+
   const perfil = useCompletarPerfil();
   const refresco = useRefrescar(perfil.refrescar);
+
+  /**
+   * La salida definitiva. Va acá y no solo en Mi cuenta porque **esta persona no
+   * puede llegar a Mi cuenta**: mientras la cuenta esté bloqueada, el stack no
+   * registra ninguna otra ruta. Sin esto, el camino que exige Play no existiría
+   * para ella.
+   */
+  const eliminarCuenta = useCallback(() => {
+    navigation.navigate(RootRoutes.ELIMINAR_CUENTA);
+  }, [navigation]);
 
   return (
     <KeyboardAvoidingView
@@ -139,6 +161,20 @@ export function PerfilBloqueadoScreen() {
             disabled={perfil.guardando}
             fullWidth
           />
+
+          {/*
+            Ghost y debajo de cerrar sesión: es la salida más definitiva de las
+            cuatro y la que menos se busca, pero **tiene que estar**. El botón no
+            borra nada — abre la pantalla que explica qué va a pasar.
+          */}
+          <Button
+            label="Eliminar mi cuenta"
+            variant="ghost"
+            onPress={eliminarCuenta}
+            disabled={perfil.guardando}
+            accessibilityLabel="Eliminar mi cuenta. Vas a ver qué se borra antes de confirmar."
+            fullWidth
+          />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -172,5 +208,5 @@ const createStyles = (theme: Theme) =>
     /** Los dos `409` no son un error de la persona: es ámbar, no rojo. */
     avisoSinSalida: { backgroundColor: theme.colors.warningMuted },
 
-    footer: { marginTop: 'auto' },
+    footer: { marginTop: 'auto', gap: theme.spacing.xs },
   });

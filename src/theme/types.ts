@@ -104,6 +104,15 @@ export interface ThemeColors {
 
   /** Capa oscura detrás de modales y sheets. */
   overlay: string;
+  /**
+   * Fondo del visor de imágenes a pantalla completa.
+   *
+   * Es más oscuro que `overlay` a propósito: acá no se trata de atenuar lo de
+   * atrás sino de **taparlo**, para que el papel blanco de un comprobante tenga
+   * bordes y se lea. Es el mismo en los dos temas: una foto se mira igual de
+   * día que de noche.
+   */
+  scrim: string;
   /** Color base de las sombras (la opacidad la pone cada componente). */
   shadow: string;
 }

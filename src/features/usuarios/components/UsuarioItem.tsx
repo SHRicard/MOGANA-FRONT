@@ -6,6 +6,7 @@ import { Text } from '@/shared/ui/atoms/Text';
 import { useTheme, type Theme } from '@/theme';
 import {
   esFacturable,
+  estaDadaDeBaja,
   faltaDni,
   identificadorUsuario,
   nombreUsuario,
@@ -22,6 +23,15 @@ export interface UsuarioItemProps {
    * informativa — es lo que decide si la fila tiene acción o no.
    */
   onVer?: (usuario: Usuario) => void;
+  /**
+   * `true` cuando **cualquier cuenta tiene ficha**, no solo los clientes.
+   *
+   * Es el caso del super admin: su listado trae los tres roles y todos abren la
+   * ficha del panel del sistema (`docs/README_FRONT_SUPER_ADMIN.md` §5). Sin
+   * esto, las filas de administración quedarían sin botón — que es lo correcto
+   * para el administrador, porque para él `/admin/clientes/:id` contesta `404`.
+   */
+  todasConFicha?: boolean;
 }
 
 /**
@@ -38,7 +48,7 @@ export interface UsuarioItemProps {
  * para cualquier id que no sea de un cliente, así que en su lugar se muestra el
  * rol y listo.
  */
-function UsuarioItemComponent({ usuario, onVer }: UsuarioItemProps) {
+function UsuarioItemComponent({ usuario, onVer, todasConFicha = false }: UsuarioItemProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -52,7 +62,7 @@ function UsuarioItemComponent({ usuario, onVer }: UsuarioItemProps) {
   // La fila conoce a su usuario; la pantalla, a dónde lleva el botón. El
   // callback se arma acá para que el padre no tenga que crear uno por fila.
   const ver = useCallback(() => onVer?.(usuario), [onVer, usuario]);
-  const tieneFicha = onVer !== undefined && esFacturable(usuario);
+  const tieneFicha = onVer !== undefined && (todasConFicha || esFacturable(usuario));
 
   return (
     <View style={styles.card}>
@@ -79,8 +89,15 @@ function UsuarioItemComponent({ usuario, onVer }: UsuarioItemProps) {
             advertencia sobre la persona. En el listado alcanza con verlas; el
             detalle va en la ficha, que es donde se hace algo al respecto.
           */}
-          {(faltaDni(usuario) || sinFiado(usuario)) && (
+          {(faltaDni(usuario) || sinFiado(usuario) || estaDadaDeBaja(usuario)) && (
             <View style={styles.marcas}>
+              {/*
+                Va primera de las tres: es la que cambia qué se puede hacer con
+                esta persona. Sigue en el listado porque hay algo que cobrarle,
+                pero **ya no entra a la app** — quien la llame no puede decirle
+                "fijate en la app" (`README_FRONT_BAJA_DE_CUENTA.md` §8).
+              */}
+              {estaDadaDeBaja(usuario) && <Chip label="Dada de baja" tone="danger" />}
               {faltaDni(usuario) && <Chip label="Falta el DNI" tone="warning" />}
               {sinFiado(usuario) && <Chip label="No se le fía" tone="danger" />}
             </View>

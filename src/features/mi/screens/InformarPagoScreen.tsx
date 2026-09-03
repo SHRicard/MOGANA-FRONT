@@ -5,6 +5,7 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
 import FileX from 'lucide-react-native/icons/file-x';
 import Hourglass from 'lucide-react-native/icons/hourglass';
+import RotateCw from 'lucide-react-native/icons/rotate-cw';
 import WifiOff from 'lucide-react-native/icons/wifi-off';
 // Rutas profundas y no el barrel `@/app/navigation`: ese barrel arrastra el
 // RootNavigator, que registra esta pantalla → ciclo en runtime.
@@ -155,7 +156,9 @@ function ElAviso({ factura, yaInformado, maximo, onVolver }: ElAvisoProps) {
           <Text variant="small" color="textMuted">
             {`Nos dijiste que pagaste ${formatMonto(enviado.monto)} el ${formatFecha(
               enviado.fecha,
-            )} por ${MEDIO_DE_PAGO_LABEL[enviado.medio].toLowerCase()}.`}
+            )} por ${MEDIO_DE_PAGO_LABEL[enviado.medio].toLowerCase()}${
+              enviado.comprobante ? ', con tu comprobante' : ''
+            }.`}
           </Text>
           <Text variant="small">
             {`Tu deuda de esta factura sigue en ${formatMonto(
@@ -195,7 +198,26 @@ function ElAviso({ factura, yaInformado, maximo, onVolver }: ElAvisoProps) {
         onCancelar={onVolver}
         enviando={aviso.isSubmitting}
         mensajeError={aviso.mensajeError}
+        comprobante={aviso.comprobante}
+        onComprobante={aviso.elegirComprobante}
       />
+
+      {/*
+        El 503 es el único que se arregla mandando de nuevo: si la imagen no se
+        pudo guardar, el backend borra el aviso antes de contestar, así que
+        reintentar no duplica nada (§7). Ya se reintentó solo una vez antes de
+        llegar acá; esto es para la segunda.
+      */}
+      {aviso.sePuedeReintentar && (
+        <View style={styles.reintento}>
+          <RotateCw size={ICON_SIZE} color={theme.colors.textMuted} />
+          <View style={styles.reintentoTexto}>
+            <Text variant="caption" color="textMuted">
+              No quedó nada registrado, así que podés mandarlo de nuevo sin duplicar el aviso.
+            </Text>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -236,6 +258,10 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.primaryMuted,
       borderRadius: theme.radius.lg,
     },
+
+    reintento: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm },
+    /** `flex: 1` para que el texto baje de línea en vez de empujar al ícono. */
+    reintentoTexto: { flex: 1 },
 
     centrado: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   });

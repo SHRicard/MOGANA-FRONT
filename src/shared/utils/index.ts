@@ -1,4 +1,7 @@
 export { getApiErrorMessage, getApiErrorStatus, esErrorDePerfilIncompleto } from './apiError';
+export { esCuentaDadaDeBaja } from './apiError';
+export type { ApiError } from './apiError';
+export { formatBytes } from './bytes';
 export { normalizarDni, esDniValido, formatearDni } from './dni';
 export { MIN_DIGITOS_DNI, MAX_DIGITOS_DNI, MAX_LARGO_DNI_TIPEADO } from './dni';
 
@@ -15,6 +18,8 @@ export {
 export {
   formatFecha,
   formatFechaHora,
+  formatHora,
+  diaRelativo,
   hoyPantalla,
   enDiasPantalla,
   enAniosPantalla,

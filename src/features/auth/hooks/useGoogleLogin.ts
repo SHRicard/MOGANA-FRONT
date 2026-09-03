@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useAppDispatch } from '@/store';
-import { getApiErrorMessage } from '@/shared/utils';
+import { esCuentaDadaDeBaja, getApiErrorMessage } from '@/shared/utils';
 import { useLoginWithGoogleMutation } from '../api';
 import { GoogleSignInCancelled, signInWithGoogle } from '../googleSignIn';
 import { setCredentials } from '../store';
@@ -50,9 +50,22 @@ export function useGoogleLogin() {
     }
   }, [dispatch, loginWithGoogle, reset]);
 
+  /**
+   * **La cuenta está dada de baja** (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5).
+   *
+   * Este era el camino más peligroso de los cuatro y por eso vale marcarlo: el
+   * login de Google vincula por correo, así que sin el corte del backend le
+   * devolvía la cuenta entera como si nada hubiera pasado.
+   *
+   * Sale del error del botón y va al cartel propio de la pantalla: adentro del
+   * botón de Google, el mensaje se leería como un problema de Google.
+   */
+  const cuentaDadaDeBaja = esCuentaDadaDeBaja(apiError);
+
   return {
     signIn,
     isSubmitting: isOpeningDialog || isExchanging,
-    error: googleError ?? getApiErrorMessage(apiError),
+    error: cuentaDadaDeBaja ? null : googleError ?? getApiErrorMessage(apiError),
+    mensajeDeBaja: cuentaDadaDeBaja ? getApiErrorMessage(apiError) : null,
   };
 }

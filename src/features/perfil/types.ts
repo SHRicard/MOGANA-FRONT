@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { esDniValido, MAX_DIGITOS_DNI, MIN_DIGITOS_DNI, normalizarDni } from '@/shared/utils';
+import {
+  esDniValido,
+  MAX_DIGITOS_DNI,
+  MIN_DIGITOS_DNI,
+  montoSchema,
+  normalizarDni,
+} from '@/shared/utils';
 
 /**
  * Fuente de verdad de **la cuenta propia**. Son dos pantallas sobre los mismos
@@ -303,4 +309,143 @@ export function aActualizarPerfilPayload(
  */
 export function esCallejonSinSalida(status: number | null): boolean {
   return status === 409;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dar de baja la cuenta (`docs/README_FRONT_BAJA_DE_CUENTA.md`)
+// ─────────────────────────────────────────────────────────────
+/**
+ * **Borrar la cuenta desde la app.** No es una idea de producto: **Google Play
+ * lo exige** — si la app deja crear una cuenta, tiene que dejar borrarla.
+ *
+ * | Endpoint | Qué hace |
+ * |---|---|
+ * | `GET /api/users/me/baja` | qué va a pasar. **No borra nada** |
+ * | `DELETE /api/users/me` | lo hace. Body: `{ "confirmacion": "ELIMINAR" }` |
+ *
+ * ⚠️ **Los dos funcionan con la cuenta bloqueada** (la que nunca cargó el DNI).
+ * Es a propósito: esa persona es la que más chances tiene de querer irse.
+ *
+ * ⚠️ **Los textos vienen escritos del servidor y se muestran tal cual.** La
+ * vista previa no es una cortesía de UX: es **el aviso que la política obliga a
+ * mostrar**, y por eso se declaró de un solo lado. Si el front redactara lo
+ * suyo, cada pantalla diría algo distinto y ninguno sería el declarado.
+ */
+
+/**
+ * Los dos caminos, que los decide **la deuda** y no la persona:
+ *
+ * - `total`: no debe nada → se borra todo, ya, y no queda nada;
+ * - `con_deuda`: la cuenta se cierra igual —tampoco puede volver a entrar— pero
+ *   se retiene lo justo para poder avisarle. **Cuando el administrador cobra el
+ *   saldo, se borra todo solo**, sin que nadie apriete nada.
+ */
+export const CaminosDeBaja = {
+  TOTAL: 'total',
+  CON_DEUDA: 'con_deuda',
+} as const;
+
+export type CaminoDeBaja = (typeof CaminosDeBaja)[keyof typeof CaminosDeBaja];
+
+/**
+ * Un dato que **queda guardado** después de la baja, con el porqué.
+ *
+ * ⚠️ Mostrarlo **no es opcional**: es la parte que la política obliga —"se puede
+ * retener por cumplimiento *si se le informa a la persona qué y por qué*"—. Si
+ * no entra en la pantalla, se achica otra cosa.
+ */
+export const datoRetenidoSchema = z.object({
+  dato: z.string(),
+  motivo: z.string(),
+});
+
+/**
+ * `GET /api/users/me/baja` — lo que se le muestra antes de borrar nada.
+ *
+ * Los seis campos de texto ya vienen redactados: la pantalla se arma sola con
+ * ellos. **No se escribe copy propio acá.**
+ */
+export const vistaPreviaDeBajaSchema = z.object({
+  /**
+   * Se lee como `string` y no con un enum de los dos caminos: un camino nuevo
+   * del backend no puede dejar a alguien sin poder borrar su cuenta, que es
+   * justo lo que Play exige que exista. Lo que cambia la pantalla igual son los
+   * textos, que vienen todos escritos.
+   */
+  camino: z.string(),
+  deuda: montoSchema,
+  facturas: z.number(),
+
+  titulo: z.string(),
+  mensaje: z.string(),
+
+  /** Qué se borra. Lista de frases ya escritas. */
+  seBorra: z.array(z.string()),
+  /** Qué queda guardado y por qué. **Vacío en el camino sin deuda ni compras.** */
+  seRetiene: z.array(datoRetenidoSchema),
+  /**
+   * Qué hace falta para que se termine de borrar. `null` cuando ya no falta
+   * nada — o sea, en el camino `total`.
+   */
+  paraCompletarla: z.string().nullish(),
+
+  /**
+   * La palabra que hay que escribir para confirmar.
+   *
+   * ⚠️ **Viaja en la respuesta justamente para no hardcodearla**: el día que
+   * cambie, la pantalla la sigue sin que haya que tocar el front.
+   */
+  confirmacion: z.string(),
+});
+
+/** `DELETE /api/users/me` — lo último que la persona lee de la app. */
+export const bajaHechaSchema = z.object({
+  camino: z.string(),
+  titulo: z.string(),
+  mensaje: z.string(),
+  deuda: montoSchema,
+  /**
+   * El correo al que le van a seguir llegando los avisos de la deuda. `null` en
+   * el camino `total`.
+   *
+   * **Se muestra**: es lo que le permite darse cuenta *ahora* —y no en tres
+   * meses— de que era una casilla que ya no lee.
+   */
+  avisosA: z.string().nullish(),
+  /** Siempre `true`: el token dejó de servir en el mismo request. */
+  sesionCerrada: z.boolean(),
+});
+
+export type DatoRetenido = z.infer<typeof datoRetenidoSchema>;
+export type VistaPreviaDeBaja = z.infer<typeof vistaPreviaDeBajaSchema>;
+export type BajaHecha = z.infer<typeof bajaHechaSchema>;
+
+/** Cuerpo de `DELETE /api/users/me`. */
+export type DarDeBajaPayload = { confirmacion: string };
+
+/**
+ * `true` si lo escrito alcanza para confirmar.
+ *
+ * Se compara **sin espacios de los costados y sin distinguir mayúsculas**, igual
+ * que el backend: el teclado del teléfono corrige solo y pelear con eso no
+ * protege de nada — quien escribió "eliminar" ya entendió lo que estaba
+ * haciendo.
+ *
+ * Existe para poder apagar el botón antes de salir a la red, no para validar: el
+ * que valida es el servidor, que contesta *"Para confirmar, escribí ELIMINAR."*
+ */
+export function confirmacionCoincide(escrito: string, esperada: string): boolean {
+  return escrito.trim().toLocaleLowerCase() === esperada.trim().toLocaleLowerCase();
+}
+
+/**
+ * `true` si esta baja dejó datos guardados, o sea si todavía hay algo que
+ * resolver.
+ *
+ * Se pregunta por `avisosA` y por la deuda, y no por el `camino`: son los datos
+ * que deciden qué mostrar, así que un camino nuevo del backend no deja la
+ * pantalla sin ese renglón.
+ */
+export function quedanDatos(baja: BajaHecha): boolean {
+  return Boolean(baja.avisosA) || baja.deuda > 0;
 }

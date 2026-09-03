@@ -1,14 +1,23 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Controller, type Control } from 'react-hook-form';
+import { Controller, useWatch, type Control } from 'react-hook-form';
+import Paperclip from 'lucide-react-native/icons/paperclip';
 import TriangleAlert from 'lucide-react-native/icons/triangle-alert';
+import type { ImagenLocal } from '@/services/imagenes';
 import { Button } from '@/shared/ui/atoms/Button';
 import { CampoFecha } from '@/shared/ui/atoms/CampoFecha';
 import { Input } from '@/shared/ui/atoms/Input';
 import { Text } from '@/shared/ui/atoms/Text';
 import { formatFecha, formatMonto, hoyPantalla } from '@/shared/utils';
 import { useTheme, type Theme } from '@/theme';
-import { MAX_LARGO_NOTA_AVISO, MAX_LARGO_REFERENCIA, type InformarPagoFormValues } from '../types';
+import {
+  comprobanteObligatorio,
+  MAX_LARGO_NOTA_AVISO,
+  MAX_LARGO_REFERENCIA,
+  MEDIO_DE_PAGO_LABEL,
+  type InformarPagoFormValues,
+} from '../types';
+import { SelectorDeComprobante } from './SelectorDeComprobante';
 import { SelectorDeMedio } from './SelectorDeMedio';
 
 export interface InformarPagoFormProps {
@@ -22,6 +31,25 @@ export interface InformarPagoFormProps {
   enviando: boolean;
   /** Error de la API, **ya redactado**: va tal cual al cartel. */
   mensajeError: string | null;
+  /**
+   * La captura del pago, si hay una.
+   *
+   * Llega por los dos caminos: elegida acá con `onComprobante`, o recibida por
+   * la hoja de compartir —y en ese caso la muestra la pantalla, arriba de todo—.
+   * En los dos sirve para lo mismo: decidir si el botón de enviar se puede
+   * apretar cuando el medio la exige.
+   */
+  comprobante?: ImagenLocal | null;
+  /**
+   * Cómo se adjunta desde acá adentro
+   * (`docs/README_FRONT_COMPROBANTES.md` §4).
+   *
+   * **Sin esto no se dibuja el input**, y es a propósito: entrando por la hoja
+   * de compartir la imagen ya vino de la billetera y se muestra arriba de todo,
+   * así que un segundo selector abajo sería ofrecer cambiar lo único que en ese
+   * camino no hace falta cambiar.
+   */
+  onComprobante?: (imagen: ImagenLocal | null) => void;
 }
 
 const ICON_SIZE = 16;
@@ -55,9 +83,27 @@ export function InformarPagoForm({
   onCancelar,
   enviando,
   mensajeError,
+  comprobante = null,
+  onComprobante,
 }: InformarPagoFormProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  /**
+   * El medio decide si el comprobante es obligatorio, así que hay que mirarlo
+   * mientras se elige y no al mandar (§1). `useWatch` y no `watch` para que el
+   * cambio redibuje solo esta parte en vez del formulario entero.
+   */
+  const medio = useWatch({ control, name: 'medio' });
+  const obligatorio = comprobanteObligatorio(medio);
+  /**
+   * Falta la captura que el backend va a exigir.
+   *
+   * Es lo que apaga el botón de enviar: *"no dejes que el 400 sea el que enseñe
+   * la regla"* (§4). Vale para los dos caminos — entrando por la hoja de
+   * compartir el comprobante ya está, así que nunca bloquea.
+   */
+  const faltaComprobante = obligatorio && comprobante === null;
 
   // El pago no pudo ser mañana. Se calcula una vez por montaje: el formulario no
   // sobrevive a un cambio de día.
@@ -103,6 +149,35 @@ export function InformarPagoForm({
         name="medio"
         render={({ field }) => <SelectorDeMedio value={field.value} onChange={field.onChange} />}
       />
+
+      {/*
+        Va pegado al medio, porque es el medio el que decide si hace falta: con
+        el input al final de la pantalla, cambiar de "efectivo" a
+        "transferencia" convertiría un campo en obligatorio sin que se vea.
+      */}
+      {onComprobante ? (
+        <View style={styles.campo}>
+          <SelectorDeComprobante
+            valor={comprobante}
+            onCambio={onComprobante}
+            obligatorio={obligatorio}
+            deshabilitado={enviando}
+          />
+
+          {faltaComprobante ? (
+            <View style={styles.faltante} accessible accessibilityRole="alert">
+              <Paperclip size={ICON_SIZE} color={theme.colors.onWarningMuted} />
+              <View style={styles.faltanteTexto}>
+                <Text variant="caption" color="onWarningMuted">
+                  {`Pagando por ${MEDIO_DE_PAGO_LABEL[
+                    medio
+                  ].toLowerCase()} necesitamos la captura del comprobante para poder confirmarlo.`}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <CampoFecha
         control={control}
@@ -207,7 +282,9 @@ export function InformarPagoForm({
             label="Avisar que pagué"
             onPress={onEnviar}
             loading={enviando}
-            disabled={enviando}
+            // Apagado mientras falte la captura obligatoria: mandar así es un
+            // 400 seguro, y el cartel de arriba ya dice por qué (§4).
+            disabled={enviando || faltaComprobante}
             fullWidth
           />
         </View>
@@ -231,6 +308,16 @@ const createStyles = (theme: Theme) =>
     },
     /** `flex: 1` para que el texto baje de línea en vez de empujar al ícono. */
     advertenciaTexto: { flex: 1 },
+
+    faltante: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: theme.spacing.sm,
+      padding: theme.spacing.sm,
+      backgroundColor: theme.colors.warningMuted,
+      borderRadius: theme.radius.md,
+    },
+    faltanteTexto: { flex: 1 },
 
     acciones: { flexDirection: 'row', gap: theme.spacing.sm },
     /** Los dos botones se reparten el ancho: ninguno es "el chiquito". */

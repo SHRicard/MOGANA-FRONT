@@ -2,13 +2,18 @@ import {
   aActualizarPerfilPayload,
   aCambiosDePerfil,
   aValoresDeFormulario,
+  bajaHechaSchema,
+  CaminosDeBaja,
   CamposDelPerfil,
   completarPerfilSchema,
+  confirmacionCoincide,
   esCallejonSinSalida,
   esTelefonoValido,
   miCuentaSchema,
   motivoCampoFijo,
   perfilSchema,
+  quedanDatos,
+  vistaPreviaDeBajaSchema,
   type Perfil,
 } from './types';
 
@@ -225,5 +230,185 @@ describe('aValoresDeFormulario', () => {
       direccion: '',
       dni: '38180903',
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Dar de baja la cuenta (`docs/README_FRONT_BAJA_DE_CUENTA.md`)
+// ─────────────────────────────────────────────────────────────
+/**
+ * Los payloads son los del doc, copiados tal cual —el doc aclara que salieron de
+ * la API corriendo—: si el backend cambia una forma, el test tiene que romper acá
+ * y no en producción.
+ */
+const vistaPreviaSinDeuda = {
+  camino: 'total',
+  deuda: 0,
+  facturas: 0,
+  titulo: 'Se va a borrar tu cuenta',
+  mensaje:
+    'No debés nada, así que se borra todo. No vas a poder volver a entrar con esta cuenta y no se puede deshacer.',
+  seBorra: [
+    'Tu perfil: nombre, documento, correo, teléfono y dirección',
+    'Tu forma de entrar: la contraseña y el vínculo con Google',
+    'Todas tus notificaciones',
+    'Tu conversación con el negocio y todos los mensajes',
+    'Las imágenes de los comprobantes que mandaste',
+  ],
+  seRetiene: [],
+  paraCompletarla: null,
+  confirmacion: 'ELIMINAR',
+};
+
+const vistaPreviaConDeuda = {
+  ...vistaPreviaSinDeuda,
+  camino: 'con_deuda',
+  deuda: 8000,
+  facturas: 1,
+  titulo: 'Tenés una deuda de $8000.00',
+  mensaje:
+    'Podés darte de baja igual y no vas a poder volver a entrar. Pero la deuda no se borra: vamos a seguir guardando tu nombre, tu documento y tu correo para poder avisarte, y nada más. Cuando termines de pagar se borra todo solo.',
+  seRetiene: [
+    {
+      dato: 'Tu nombre y tu documento',
+      motivo: 'Es lo que identifica la deuda mientras no esté saldada.',
+    },
+    {
+      dato: 'Tu correo',
+      motivo:
+        'Es por donde te van a seguir llegando los avisos de lo que debés. No lo usamos para nada más.',
+    },
+    {
+      dato: 'Tus facturas y los pagos anotados',
+      motivo: 'Es el registro contable del negocio y queda aunque la deuda se salde.',
+    },
+  ],
+  paraCompletarla:
+    'Cuando saldes los $8000.00 que debés, se borra solo lo que haya quedado. No tenés que volver a pedir nada.',
+};
+
+describe('vistaPreviaDeBajaSchema', () => {
+  it('acepta el camino sin deuda del doc tal cual', () => {
+    const parsed = vistaPreviaDeBajaSchema.parse(vistaPreviaSinDeuda);
+
+    expect(parsed.camino).toBe(CaminosDeBaja.TOTAL);
+    expect(parsed.seBorra).toHaveLength(5);
+    // Sin deuda ni compras no queda nada guardado: es el único caso en el que la
+    // lista que la política obliga a mostrar está vacía.
+    expect(parsed.seRetiene).toEqual([]);
+    expect(parsed.paraCompletarla).toBeNull();
+  });
+
+  it('acepta el camino con deuda del doc tal cual', () => {
+    const parsed = vistaPreviaDeBajaSchema.parse(vistaPreviaConDeuda);
+
+    expect(parsed.camino).toBe(CaminosDeBaja.CON_DEUDA);
+    expect(parsed.seRetiene).toHaveLength(3);
+    expect(parsed.paraCompletarla).toContain('se borra solo');
+  });
+
+  /** Sin deuda pero con compras hechas: cambia una sola cosa. */
+  it('el camino total también puede retener datos', () => {
+    const parsed = vistaPreviaDeBajaSchema.parse({
+      ...vistaPreviaSinDeuda,
+      facturas: 1,
+      seRetiene: [
+        {
+          dato: 'El registro de tus compras',
+          motivo:
+            'Queda en la contabilidad del negocio pero sin tu nombre ni ningún dato tuyo: no hay forma de volver a vincularlo con vos.',
+        },
+      ],
+    });
+
+    expect(parsed.camino).toBe(CaminosDeBaja.TOTAL);
+    expect(parsed.seRetiene).toHaveLength(1);
+  });
+
+  /**
+   * Un camino nuevo del backend no puede dejar a alguien sin poder borrar su
+   * cuenta: es justo lo que Google Play exige que exista.
+   */
+  it('un camino que la app no conoce no rompe la pantalla', () => {
+    expect(vistaPreviaDeBajaSchema.parse({ ...vistaPreviaSinDeuda, camino: 'diferido' }).camino).toBe(
+      'diferido',
+    );
+  });
+});
+
+describe('bajaHechaSchema', () => {
+  it('acepta la despedida sin deuda del doc tal cual', () => {
+    const parsed = bajaHechaSchema.parse({
+      camino: 'total',
+      titulo: 'Listo, tu cuenta se borró',
+      mensaje:
+        'No quedó ningún dato tuyo. Si algún día querés volver, vas a tener que registrarte de nuevo.',
+      deuda: 0,
+      avisosA: null,
+      sesionCerrada: true,
+    });
+
+    expect(parsed.avisosA).toBeNull();
+    expect(parsed.sesionCerrada).toBe(true);
+  });
+
+  it('acepta la despedida con deuda del doc tal cual', () => {
+    const parsed = bajaHechaSchema.parse({
+      camino: 'con_deuda',
+      titulo: 'Tu cuenta quedó dada de baja',
+      mensaje:
+        'Todavía debés $8000.00. Guardamos tu nombre, tu documento y tu correo solo para poder avisarte, y nada más. Cuando termines de pagar se borra todo solo.',
+      deuda: 8000,
+      avisosA: 'zoraida@mail.com',
+      sesionCerrada: true,
+    });
+
+    expect(parsed.avisosA).toBe('zoraida@mail.com');
+  });
+});
+
+describe('confirmacionCoincide', () => {
+  /**
+   * Se acepta con espacios y en minúscula, igual que el backend: el teclado del
+   * teléfono corrige solo y pelear con eso no protege de nada.
+   */
+  it('no distingue mayúsculas ni espacios de los costados', () => {
+    expect(confirmacionCoincide('ELIMINAR', 'ELIMINAR')).toBe(true);
+    expect(confirmacionCoincide(' eliminar ', 'ELIMINAR')).toBe(true);
+    expect(confirmacionCoincide('Eliminar', 'ELIMINAR')).toBe(true);
+  });
+
+  it('no alcanza con otra palabra ni con el campo vacío', () => {
+    expect(confirmacionCoincide('', 'ELIMINAR')).toBe(false);
+    expect(confirmacionCoincide('borrar', 'ELIMINAR')).toBe(false);
+    expect(confirmacionCoincide('elimina', 'ELIMINAR')).toBe(false);
+  });
+
+  /**
+   * La palabra sale de la respuesta y **no está escrita en el front**: el día que
+   * el backend la cambie, la pantalla la sigue sin que haya que tocar nada.
+   */
+  it('sigue la palabra que mande el servidor, sea cual sea', () => {
+    expect(confirmacionCoincide('borrar mi cuenta', 'BORRAR MI CUENTA')).toBe(true);
+    expect(confirmacionCoincide('ELIMINAR', 'BORRAR MI CUENTA')).toBe(false);
+  });
+});
+
+describe('quedanDatos', () => {
+  const despedida = {
+    camino: 'total',
+    titulo: 'Listo',
+    mensaje: 'No quedó nada.',
+    deuda: 0,
+    avisosA: null,
+    sesionCerrada: true,
+  };
+
+  it('sin correo de avisos y sin deuda no quedó nada', () => {
+    expect(quedanDatos(despedida)).toBe(false);
+  });
+
+  it('con un correo al que le van a escribir, sí', () => {
+    expect(quedanDatos({ ...despedida, avisosA: 'zoraida@mail.com', deuda: 8000 })).toBe(true);
   });
 });
