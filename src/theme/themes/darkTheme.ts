@@ -48,6 +48,8 @@ export const darkTheme: ThemeBase = {
     splashBackground: palette.white,
 
     overlay: palette.blackAlpha50,
+    // Mismo valor en ambos temas: una foto se mira igual de día que de noche.
+    scrim: palette.blackAlpha92,
     shadow: palette.black,
   },
   spacing,

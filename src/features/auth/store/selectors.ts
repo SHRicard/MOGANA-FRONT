@@ -27,3 +27,12 @@ export const selectEstaBloqueado = (state: RootState): boolean => estaBloqueado(
 /** El texto del bloqueo que mandó el backend, para mostrarlo tal cual. */
 export const selectMotivoBloqueo = (state: RootState): string | null =>
   state.auth.user?.motivoBloqueo ?? null;
+
+/**
+ * Por qué se terminó la sesión sin que la persona la cerrara, o `null`.
+ *
+ * Hoy es el mensaje de la **cuenta dada de baja**
+ * (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5), escrito por el backend y para
+ * mostrarse tal cual. Lo lee el login.
+ */
+export const selectMotivoDeSalida = (state: RootState) => state.auth.motivoDeSalida;

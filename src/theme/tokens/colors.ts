@@ -59,5 +59,11 @@ export const palette = {
 
   // Transparencias
   blackAlpha50: 'rgba(0, 0, 0, 0.5)',
+  /**
+   * Casi opaco. Es para el visor de imágenes a pantalla completa: con 0.5 el
+   * fondo de la pantalla se sigue leyendo por detrás y una captura blanca
+   * pierde los bordes contra él.
+   */
+  blackAlpha92: 'rgba(0, 0, 0, 0.92)',
   whiteAlpha10: 'rgba(255, 255, 255, 0.1)',
 } as const;

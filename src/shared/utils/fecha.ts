@@ -100,6 +100,43 @@ export function formatFechaHora(iso: string): string {
   return parsed.isValid ? parsed.toFormat(`${FORMATO_FECHA_PANTALLA} HH:mm`) : iso;
 }
 
+/**
+ * **Solo la hora** de un instante ISO: `"14:32"`.
+ *
+ * Existe aparte de `formatFechaHora` por el chat: adentro de un globito la fecha
+ * ya la dice el separador del día, y repetirla en cada mensaje llena la columna
+ * de números que no cambian.
+ */
+export function formatHora(iso: string): string {
+  const parsed = DateTime.fromISO(iso);
+  return parsed.isValid ? parsed.toFormat('HH:mm') : iso;
+}
+
+/**
+ * **El día de un instante ISO, como lo diría una persona**: `"hoy"`, `"ayer"`,
+ * o la fecha larga si fue antes.
+ *
+ * Es el separador que parte un chat en días. "Hoy" y "ayer" son lo que alguien
+ * busca al recorrer una conversación hacia arriba; una fecha exacta obliga a
+ * calcular cuántos días pasaron.
+ */
+export function diaRelativo(iso: string): string {
+  const fecha = DateTime.fromISO(iso);
+  if (!fecha.isValid) {
+    return iso;
+  }
+
+  const dias = fecha.startOf('day').diff(DateTime.now().startOf('day'), 'days').days;
+
+  if (dias === 0) {
+    return 'hoy';
+  }
+  if (dias === -1) {
+    return 'ayer';
+  }
+  return formatFechaLargaPantalla(fecha.toFormat(FORMATO_FECHA_PANTALLA));
+}
+
 /** Hoy, en formato de pantalla. */
 export function hoyPantalla(): string {
   return DateTime.now().toFormat(FORMATO_FECHA_PANTALLA);

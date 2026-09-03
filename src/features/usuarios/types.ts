@@ -136,6 +136,27 @@ export const usuarioSchema = z.object({
    */
   estado: estadoAccesoSchema.nullish(),
   motivoBloqueo: z.string().nullish(),
+
+  /**
+   * Cuándo se dio de baja, si se dio
+   * (`docs/README_FRONT_BAJA_DE_CUENTA.md` §8).
+   *
+   * `null` en las cuentas vivas. Con fecha, es alguien que **pidió borrar su
+   * cuenta debiendo plata**: se cerró igual y del perfil solo quedó lo justo
+   * para poder avisarle —nombre, documento y correo—, y cuando salde el saldo se
+   * borra todo solo, sin que nadie apriete nada.
+   *
+   * ⚠️ **Sigue apareciendo en el listado y en el tablero de deuda a propósito**:
+   * hay algo que cobrar. Lo que ya no puede es **entrar a la app**, así que el
+   * que la llame no puede decirle "fijate en la app". Eso es lo que hace que el
+   * dato tenga que verse en la fila y no solo en la ficha.
+   *
+   * Las cuentas **borradas del todo** no llegan acá: desaparecen del listado, del
+   * tablero, de las métricas por cliente y de los anuncios. No es un filtro que
+   * se pueda desactivar — son cuentas sin nombre ni correo, serían una fila en
+   * blanco.
+   */
+  dadaDeBajaEn: z.string().nullish(),
 });
 
 /**
@@ -205,6 +226,22 @@ export function nombreUsuario(usuario: Usuario): string {
  */
 export function esFacturable(usuario: Usuario): boolean {
   return usuario.rol === Roles.CLIENTE;
+}
+
+/**
+ * `true` si esta cuenta **está dada de baja**
+ * (`docs/README_FRONT_BAJA_DE_CUENTA.md` §8).
+ *
+ * Se pregunta por la fecha porque es lo único que llega: no hay un estado
+ * aparte. Sin el campo —una respuesta vieja, un endpoint que todavía no lo
+ * manda— la respuesta es que no, que es como está el 99% de las cuentas.
+ *
+ * ⚠️ **No tiene nada que ver con el bloqueo del DNI ni con el fiado.** Se pueden
+ * dar juntas, y significan cosas distintas: al bloqueado le falta un dato, al
+ * que no se le fía es una advertencia del mostrador, y este **ya no vuelve**.
+ */
+export function estaDadaDeBaja(usuario: { dadaDeBajaEn?: string | null }): boolean {
+  return usuario.dadaDeBajaEn != null;
 }
 
 // ─────────────────────────────────────────────────────────────

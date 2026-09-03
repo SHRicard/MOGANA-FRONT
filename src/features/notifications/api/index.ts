@@ -3,4 +3,6 @@ export {
   useListarNotificacionesQuery,
   useMarcarLeidaMutation,
   useLeerTodasMutation,
+  useBorrarNotificacionMutation,
+  useBorrarTodasLasNotificacionesMutation,
 } from './notificacionesApi';

@@ -13,6 +13,7 @@ import {
   type EstadoCuenta,
   type EstadoFactura,
 } from '@/features/facturas';
+import type { ImagenLocal } from '@/services/imagenes';
 import {
   fechaApiSchema,
   fechaPantallaSchema,
@@ -165,6 +166,87 @@ export const MEDIOS_DE_PAGO: readonly MedioDePago[] = [
   MediosDePago.DEPOSITO,
   MediosDePago.OTRO,
 ];
+
+/**
+ * Los medios que **exigen el comprobante**
+ * (`docs/README_FRONT_COMPROBANTES.md` §1).
+ *
+ * La regla no es nuestra: la valida el backend y contesta un `400` si falta. La
+ * repetimos en el front por un motivo concreto —*"no dejes que el 400 sea el que
+ * enseñe la regla"*—: el botón se apaga y el campo dice que es obligatorio antes
+ * de que alguien complete todo el formulario para que se lo rechacen.
+ *
+ * El criterio de fondo es qué se puede verificar contra el banco. Una
+ * transferencia, un Mercado Pago y un depósito dejan un movimiento con
+ * comprobante; **el efectivo no deja nada** y `otro` puede ser cualquier cosa,
+ * así que exigirles una captura sería pedir algo que no existe.
+ */
+export const MEDIOS_CON_COMPROBANTE: readonly MedioDePago[] = [
+  MediosDePago.TRANSFERENCIA,
+  MediosDePago.MERCADO_PAGO,
+  MediosDePago.DEPOSITO,
+];
+
+/** `true` si con este medio hay que adjuntar sí o sí la captura del pago. */
+export function comprobanteObligatorio(medio: MedioDePago): boolean {
+  return MEDIOS_CON_COMPROBANTE.includes(medio);
+}
+
+/**
+ * El tope de peso que acepta el backend: **8 MB**
+ * (`docs/README_FRONT_COMPROBANTES.md` §1).
+ *
+ * Se corta en el front porque el `413` no se puede corregir desde el
+ * formulario: no hay campo que tocar, hay que elegir otra imagen. Decirlo al
+ * elegir ahorra subir ocho megas para que los rechacen.
+ */
+export const MAX_COMPROBANTE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Los formatos que acepta el backend: **JPG, PNG, WebP o HEIC**
+ * (`docs/README_FRONT_COMPROBANTES.md` §1). Nada más — ni video, ni GIF, ni un
+ * PDF sin convertir.
+ *
+ * Están los dos nombres del JPEG (`image/jpg` no es un mime real, pero algunos
+ * proveedores de Android lo declaran igual) y los dos del HEIC, que es lo que
+ * sale de un iPhone y llega por una galería compartida.
+ *
+ * ⚠️ **Esto no reemplaza al backend, que mira los primeros bytes del archivo.**
+ * El mime que declara un proveedor es lo que él dice que es, y renombrar un
+ * `.mp4` a `.jpg` engaña a esta lista pero no al servidor. Sirve para lo que
+ * pasa de verdad todos los días: cortar temprano lo que no se va a poder subir,
+ * en vez de gastarle los datos al cliente para terminar en un `400`.
+ */
+export const TIPOS_DE_COMPROBANTE: readonly string[] = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+];
+
+/**
+ * `true` si el backend guarda un archivo de este tipo.
+ *
+ * Normaliza antes de comparar: un mime puede llegar en mayúsculas o con
+ * parámetros pegados (`image/jpeg; charset=binary`), y una comparación cruda
+ * rechazaría una foto perfectamente válida.
+ */
+export function tipoDeComprobanteAceptado(mimeType: string): boolean {
+  const limpio = mimeType.split(';')[0].trim().toLowerCase();
+  return TIPOS_DE_COMPROBANTE.includes(limpio);
+}
+
+/**
+ * La regla completa del archivo, para pasársela a los servicios que consiguen
+ * uno. Son ellos los que cortan, pero **la regla es de acá**: quien conoce el
+ * contrato del backend es la feature, no el picker ni el puente de compartir.
+ */
+export const REGLA_DEL_COMPROBANTE = {
+  maxBytes: MAX_COMPROBANTE_BYTES,
+  tiposAceptados: TIPOS_DE_COMPROBANTE,
+} as const;
 
 /**
  * En qué quedó un aviso de pago.
@@ -417,6 +499,36 @@ export type MiFactura = z.infer<typeof miFacturaSchema>;
  *   informó. Cuando difiere de `monto`, se muestran **los dos**.
  * - **`factura.saldo`** es el saldo de **hoy**, no el de cuando avisó.
  */
+/**
+ * La imagen que se adjuntó al avisar (`docs/compartir_comprobante.md` §7).
+ *
+ * ⚠️ **`url` y `miniatura` se vencen en una hora.** Vienen firmadas y caducan a
+ * propósito: un comprobante muestra el alias, el banco y a veces el nombre
+ * completo de una persona, así que un link que se filtre tiene que morirse solo.
+ *
+ * Eso manda tres reglas sobre cómo se usan, y las tres son de la UI:
+ *
+ * 1. **No se guardan.** Ni en el storage, ni en un slice persistido, ni en una
+ *    caché de imágenes en disco.
+ * 2. Se usan **al renderizar**. Si la pantalla estuvo abierta mucho rato, se
+ *    vuelve a pedir el aviso para tener links nuevos.
+ * 3. Si una imagen no carga, **casi siempre es esto**: recargar la lista antes
+ *    de mostrar un error.
+ *
+ * Los tres campos son laxos a propósito. `estado` es texto libre porque la app
+ * no ramifica por él —lo que decide si se puede mostrar algo es que haya `url`—,
+ * y un valor nuevo del backend no tiene por qué tirar abajo la pantalla entera
+ * por el `catchSchemaFailure`.
+ */
+export const comprobanteDelAvisoSchema = z.object({
+  estado: z.string(),
+  /** Firmada y **de una hora**. Puede no estar mientras se termina de guardar. */
+  url: z.string().nullish(),
+  miniatura: z.string().nullish(),
+});
+
+export type ComprobanteDelAviso = z.infer<typeof comprobanteDelAvisoSchema>;
+
 export const miAvisoDePagoSchema = z.object({
   id: z.string(),
   estado: estadoDeAvisoSchema,
@@ -440,6 +552,12 @@ export const miAvisoDePagoSchema = z.object({
     saldo: montoSchema,
     fechaFin: fechaApiSchema,
   }),
+  /**
+   * La imagen adjunta, si el aviso trajo una. **Opcional**: se avisa igual sin
+   * comprobante desde el formulario de adentro de la app, y los avisos viejos
+   * son anteriores a que esto existiera.
+   */
+  comprobante: comprobanteDelAvisoSchema.nullish(),
 });
 
 /** Una página de avisos, el último primero. */
@@ -627,6 +745,20 @@ export type ListarMisFacturasParams = {
   pagina?: number;
   /** De 1 a 100. La API usa 20 si no se manda. */
   limite?: number;
+  /**
+   * Solo las que todavía se deben: deja afuera las **pagadas** y las
+   * **anuladas** (`docs/compartir_comprobante.md` §3).
+   *
+   * Existe para una pantalla concreta: elegir a qué factura corresponde un
+   * comprobante que llegó por la hoja de compartir. Una factura ya paga no puede
+   * ser la de ese comprobante, y una anulada tampoco.
+   *
+   * ⚠️ **No es lo mismo que `estado`**, y por eso son dos parámetros. `estado`
+   * elige UN casillero; esto junta los tres que se deben (`pendiente`,
+   * `proxima_a_vencer`, `vencida`) sin tener que pedir tres listas y pegarlas a
+   * mano — que, además, rompería la paginación.
+   */
+  soloImpagas?: boolean;
 };
 
 /** Query de `GET /mi/pagos-informados`. Todo opcional. */
@@ -652,6 +784,26 @@ export type ListarMisAvisosParams = {
 export const AVISOS_SIN_RESOLVER: ListarMisAvisosParams = {
   estado: EstadosDeAviso.PENDIENTE,
   limite: 100,
+};
+
+/**
+ * Las facturas que pueden ser la de un comprobante compartido
+ * (`docs/compartir_comprobante.md` §3).
+ *
+ * **Solo las impagas**: una factura ya paga —o anulada— no puede ser la de este
+ * comprobante, y ofrecerla es ofrecer un `400`.
+ *
+ * **Sin paginar**, con el tope de 50 que pide el doc: es un selector, no un
+ * listado. Quien tenga más de cincuenta facturas sin pagar tiene un problema que
+ * no se resuelve con un paginador.
+ *
+ * Constante a nivel de módulo por lo mismo que `AVISOS_SIN_RESOLVER`: en RTK
+ * Query el objeto de params **es la clave de cache**, y uno nuevo por render
+ * sería una request nueva por render.
+ */
+export const FACTURAS_PARA_COMPROBANTE: ListarMisFacturasParams = {
+  soloImpagas: true,
+  limite: 50,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -727,18 +879,75 @@ export function crearInformarPagoSchema(maximo: number, fechaEmision: string) {
     );
 }
 
+/** Los campos del aviso, sin la factura: esa va en la URL. */
+export type DatosDelAviso = {
+  monto: number;
+  medio: MedioDePago;
+  /** `AAAA-MM-DD`. Sin esto, hoy. */
+  fecha?: string;
+  referencia?: string;
+  nota?: string;
+};
+
 /** `POST /api/mi/facturas/:id/informar-pago`. La factura va en la URL. */
 export type InformarPagoPayload = {
   facturaId: string;
-  datos: {
-    monto: number;
-    medio: MedioDePago;
-    /** `AAAA-MM-DD`. Sin esto, hoy. */
-    fecha?: string;
-    referencia?: string;
-    nota?: string;
-  };
+  datos: DatosDelAviso;
+  /**
+   * La imagen del comprobante, cuando el aviso viene de la hoja de compartir
+   * (`docs/compartir_comprobante.md`).
+   *
+   * **Es el mismo endpoint de las dos formas.** Lo único que cambia es el
+   * cuerpo: con imagen sale `multipart/form-data`, sin imagen sale JSON. Al
+   * backend le da igual de dónde salió la foto.
+   */
+  comprobante?: ImagenLocal;
 };
+
+/**
+ * El cuerpo `multipart/form-data` del aviso con comprobante (§4).
+ *
+ * Las cuatro trampas de `FormData` en React Native, y dónde está cada una:
+ *
+ * 1. **El archivo es `{ uri, type, name }`**, no un `Blob` ni un `File`. Eso es
+ *    de React Native, no del backend: así lo entiende su polyfill.
+ * 2. **El `Content-Type` no se pone a mano** — eso no pasa acá sino en el
+ *    endpoint, y es la causa número uno del `400` de "falta el comprobante": el
+ *    runtime tiene que escribirlo él para incluir el `boundary`.
+ * 3. **`name` lleva extensión.** El nombre viene del módulo nativo, que la saca
+ *    del tipo real del archivo.
+ * 4. **El `type` que se manda no decide nada.** El backend verifica el formato
+ *    por los primeros bytes; el mime es orientativo.
+ *
+ * ⚠️ **El monto va como número crudo** (`"8810.5"`), no formateado: en el
+ * formulario se escribe `"8.810,50"` y eso, tal cual, es un `400`.
+ *
+ * Los opcionales vacíos **se omiten** en vez de viajar en blanco, igual que en
+ * el cuerpo JSON.
+ */
+export function aCuerpoConComprobante(datos: DatosDelAviso, comprobante: ImagenLocal): FormData {
+  const cuerpo = new FormData();
+
+  cuerpo.append('monto', String(datos.monto));
+  cuerpo.append('medio', datos.medio);
+  if (datos.fecha) {
+    cuerpo.append('fecha', datos.fecha);
+  }
+  if (datos.referencia) {
+    cuerpo.append('referencia', datos.referencia);
+  }
+  if (datos.nota) {
+    cuerpo.append('nota', datos.nota);
+  }
+
+  cuerpo.append('comprobante', {
+    uri: comprobante.archivo,
+    type: comprobante.mimeType,
+    name: comprobante.nombre,
+  });
+
+  return cuerpo;
+}
 
 /**
  * Formulario → cuerpo del POST.
@@ -755,6 +964,7 @@ export type InformarPagoPayload = {
 export function aInformarPagoPayload(
   facturaId: string,
   valores: InformarPagoFormValues,
+  comprobante?: ImagenLocal,
 ): InformarPagoPayload {
   const referencia = valores.referencia.trim();
   const nota = valores.nota.trim();
@@ -768,6 +978,7 @@ export function aInformarPagoPayload(
       ...(referencia ? { referencia } : {}),
       ...(nota ? { nota } : {}),
     },
+    ...(comprobante ? { comprobante } : {}),
   };
 }
 

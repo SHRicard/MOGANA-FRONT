@@ -1,1 +1,7 @@
-export { perfilApi, useGetMiPerfilQuery, useActualizarMiCuentaMutation } from './perfilApi';
+export {
+  perfilApi,
+  useGetMiPerfilQuery,
+  useActualizarMiCuentaMutation,
+  useGetVistaPreviaDeBajaQuery,
+  useDarDeBajaMutation,
+} from './perfilApi';

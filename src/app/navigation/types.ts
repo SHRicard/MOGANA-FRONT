@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 // las pantallas, que importan este archivo para tipar sus params. Por el barrel
 // sería un ciclo.
 import type { EstadoFactura } from '@/features/facturas/types';
+import type { ContextoDeMensaje } from '@/features/mensajes/types';
 import { AppRoutes, AuthRoutes, RootRoutes } from './routes';
 
 /**
@@ -51,6 +52,26 @@ export type RootStackParamList = {
   [RootRoutes.APP]: NavigatorScreenParams<AppTabParamList> | undefined;
   /** El panel de administración. Sin params: es un índice de dos secciones. */
   [RootRoutes.PANEL_ADMIN]: undefined;
+  /** El panel del sistema. Sin params: es un índice de secciones. */
+  [RootRoutes.PANEL_SUPER_ADMIN]: undefined;
+  /** El tablero del sistema. Sin params: es la foto de ahora, sin filtros. */
+  [RootRoutes.SISTEMA]: undefined;
+  /**
+   * De quién es la ficha del sistema. El id es obligatorio y el nombre viaja al
+   * lado para que el encabezado tenga qué mostrar mientras la cuenta se está
+   * trayendo: el renglón del listado ya lo tiene.
+   */
+  [RootRoutes.CUENTA_DEL_SISTEMA]: { cuentaId: string; cuentaNombre: string };
+  /**
+   * El historial. Sin params son todos los cambios; con `objetivoId` es el de
+   * **una cuenta**, que es de donde sale la mitad del valor de la pantalla — la
+   * lista completa sin filtrar se mira una vez por mes.
+   *
+   * El nombre viaja al lado por lo mismo que en la ficha: el encabezado tiene
+   * que poder decir de quién es el historial desde el primer frame, y los
+   * renglones pueden venir con la cuenta ya borrada.
+   */
+  [RootRoutes.AUDITORIA]: { objetivoId?: string; objetivoNombre?: string } | undefined;
   /**
    * Las métricas. Sin params: el mes se elige adentro y arranca en el actual,
    * que es lo que la API devuelve sin `mes`.
@@ -71,6 +92,19 @@ export type RootStackParamList = {
   [RootRoutes.PRODUCTOS]: undefined;
   /** El índice de tickets. Sin params: son todos los meses, sin filtro. */
   [RootRoutes.TICKETS]: undefined;
+  /** La bandeja de avisos de pago del panel. Se entra sin filtro: los pendientes. */
+  [RootRoutes.AVISOS_DE_PAGO]: undefined;
+  /** El panel del store: cuánto ocupan los comprobantes y qué se puede liberar. */
+  [RootRoutes.STORE_COMPROBANTES]: undefined;
+  /** El listado del store, uno por uno. Se entra sin filtros. */
+  [RootRoutes.COMPROBANTES_DEL_STORE]: undefined;
+  /** La bandeja de mensajes del panel. Sin params: los filtros viven adentro. */
+  [RootRoutes.BANDEJA_MENSAJES]: undefined;
+  /**
+   * El hilo de un cliente. **`clienteId` es obligatorio**: no existe "el hilo"
+   * sin saber de quién, y es lo mismo que pide la API, donde va en la URL.
+   */
+  [RootRoutes.HILO_DEL_CLIENTE]: { clienteId: string };
   /**
    * Qué mes se está mirando, como `AAAA-MM`. **Es obligatorio**: no existe "el
    * ticket" sin mes, y es lo mismo que pide la API, donde el mes va en la URL.
@@ -110,12 +144,42 @@ export type RootStackParamList = {
    * sea el de ahora y no el de cuando se tocó el botón.
    */
   [RootRoutes.INFORMAR_PAGO]: { facturaId: string; numero: number };
+  /**
+   * Elegir a qué factura corresponde el comprobante compartido. **Sin params**,
+   * y a propósito: la imagen llega por la hoja de compartir de Android mucho
+   * antes de que exista una navegación —puede llegar con la app cerrada—, así
+   * que vive en el store y la pantalla la lee de ahí.
+   *
+   * Pasarla como param sería, además, meter una ruta de archivo en el estado de
+   * navegación, que React Navigation serializa y persiste.
+   */
+  [RootRoutes.ELEGIR_FACTURA]: undefined;
   /** Mis avisos de pago. Sin params: el filtro vive adentro. */
   [RootRoutes.MIS_AVISOS]: undefined;
   /** Qué compro. Sin params: es todo mi historial, sin filtro. */
   [RootRoutes.MIS_COMPRAS]: undefined;
+  /**
+   * Mi hilo con el local. **Ningún id**: el hilo es la persona y sale del token.
+   *
+   * `sobre` es opcional y sirve para entrar preguntando por algo concreto —una
+   * factura, un aviso de pago—. Lleva la `etiqueta` ya redactada porque el chip
+   * la muestra tal cual, igual que hace el backend con los mensajes que ya
+   * tienen contexto.
+   *
+   * ⚠️ Tiene que ser **de quien escribe**: mandar la factura de otro es un `400`.
+   * Por eso solo se pasa desde una pantalla que ya estaba mostrando algo suyo,
+   * nunca desde un campo que se tipea.
+   */
+  [RootRoutes.MIS_MENSAJES]:
+    | { sobre?: { tipo: ContextoDeMensaje; id: string; etiqueta: string } }
+    | undefined;
   /** La cuenta propia. Sin params: el usuario sale del token, nunca de la URL. */
   [RootRoutes.MI_CUENTA]: undefined;
+  /**
+   * Eliminar mi cuenta. Sin params: qué va a pasar lo contesta la API —es el
+   * aviso que la política obliga a mostrar— y la persona sale del token.
+   */
+  [RootRoutes.ELIMINAR_CUENTA]: undefined;
   /** Ajustes de la app. Sin params: lo que se muestra sale del ThemeProvider. */
   [RootRoutes.CONFIGURACION]: undefined;
   /** Verificar el correo. Sin params: el código lo escribe la persona. */

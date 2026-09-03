@@ -8,6 +8,7 @@ import Search from 'lucide-react-native/icons/search';
 import { Badge } from '@/shared/ui/atoms/Badge';
 import { Button } from '@/shared/ui/atoms/Button';
 import { Calendario } from '@/shared/ui/atoms/Calendario';
+import { Checkbox } from '@/shared/ui/atoms/Checkbox';
 import { Chip } from '@/shared/ui/atoms/Chip';
 import { CampoFecha } from '@/shared/ui/atoms/CampoFecha';
 import { Dialogo, DIALOGO_ICON_SIZE } from '@/shared/ui/atoms/Dialogo';
@@ -265,6 +266,23 @@ export function AtomsSection() {
         <ShowcaseItem label="Filtro: seleccionado invierte el fondo, no solo el color" row>
           <Chip label="Todos" selected onPress={noop} />
           <Chip label="Usuario" onPress={noop} />
+        </ShowcaseItem>
+      </ShowcaseSection>
+
+      <ShowcaseSection
+        title="Checkbox"
+        description="Casilla de selección. El estado no se comunica solo con el color: tildada se rellena y aparece el tilde. 'indeterminado' es el 'seleccionar todo' a medias — sin él, 'ninguno' y 'algunos' se ven igual."
+        importPath="@/shared/ui/atoms/Checkbox"
+      >
+        <ShowcaseItem label="Los tres estados" row>
+          <Checkbox checked={false} onChange={noop} accessibilityLabel="Sin marcar" />
+          <Checkbox checked onChange={noop} accessibilityLabel="Marcada" />
+          <Checkbox checked="indeterminado" onChange={noop} accessibilityLabel="Algunos" />
+          <Checkbox checked disabled onChange={noop} accessibilityLabel="Apagada" />
+        </ShowcaseItem>
+
+        <ShowcaseItem label="Con texto al lado">
+          <Checkbox checked onChange={noop} label="Incluir los ya liberados" />
         </ShowcaseItem>
       </ShowcaseSection>
 

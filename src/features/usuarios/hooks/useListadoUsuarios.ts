@@ -38,6 +38,18 @@ export interface ListadoUsuarios {
   /** `true` si hay texto o rol elegido. Es lo que puede dejar la lista vacía. */
   hayFiltros: boolean;
 
+  /**
+   * A qué ficha lleva tocar una fila.
+   *
+   * `true` para el super admin: su listado trae **los tres roles**, y la ficha
+   * del administrador (`/admin/clientes/:id`) solo existe para los clientes —a
+   * una cuenta de administración le contesta `404`—. La suya es la del panel del
+   * sistema, que existe para las tres y es desde donde se mueve un rol
+   * (`docs/README_FRONT_SUPER_ADMIN.md` §5). De ahí se pasa a la del cliente
+   * cuando la cuenta es un cliente.
+   */
+  fichaDelSistema: boolean;
+
   // ── Resultados ──
   usuarios: readonly Usuario[];
   total: number;
@@ -170,6 +182,7 @@ export function useListadoUsuarios(): ListadoUsuarios {
     limpiarFiltros,
     hayBusqueda: q.length > 0,
     hayFiltros: q.length > 0 || rol !== null,
+    fichaDelSistema: esSuperAdmin,
 
     usuarios: resultado.datos,
     total: resultado.total,

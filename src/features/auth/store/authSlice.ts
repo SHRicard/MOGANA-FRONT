@@ -10,6 +10,19 @@ import type { AuthResponse, User } from '../types';
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  /**
+   * Por qué se terminó la sesión, cuando no la cerró la persona.
+   *
+   * Hoy es uno solo: la cuenta **dada de baja**
+   * (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5). El texto lo escribe el backend y
+   * se muestra tal cual en el login — sin esto, alguien con la app abierta en
+   * otro teléfono se encontraría de golpe en la pantalla de ingreso sin ninguna
+   * explicación.
+   *
+   * **No se persiste**: es un aviso para este arranque, no un estado de la
+   * cuenta. Al reabrir la app ya no tiene sentido.
+   */
+  motivoDeSalida: string | null;
 }
 
 /**
@@ -26,9 +39,9 @@ function getInitialState(): AuthState {
 
   // Sin token no hay sesión válida, aunque haya quedado un usuario cacheado.
   if (!token) {
-    return { user: null, isAuthenticated: false };
+    return { user: null, isAuthenticated: false, motivoDeSalida: null };
   }
-  return { user, isAuthenticated: true };
+  return { user, isAuthenticated: true, motivoDeSalida: null };
 }
 
 const authSlice = createSlice({
@@ -42,6 +55,8 @@ const authSlice = createSlice({
       storageService.set(StorageKeys.USER, user);
       state.user = user;
       state.isAuthenticated = true;
+      // Entró: el cartel del intento anterior ya no explica nada.
+      state.motivoDeSalida = null;
     },
 
     /**
@@ -63,15 +78,29 @@ const authSlice = createSlice({
       state.user = action.payload;
     },
 
-    /** Cierra la sesión y limpia todo rastro del usuario. */
-    logout: (state) => {
+    /**
+     * Cierra la sesión y limpia todo rastro del usuario.
+     *
+     * El `motivo` es **opcional y solo para las salidas que no pidió la
+     * persona**: hoy, la cuenta dada de baja desde otro teléfono
+     * (`docs/README_FRONT_BAJA_DE_CUENTA.md` §5). El texto lo manda el backend y
+     * se muestra tal cual en el login. Un logout normal no lleva nada y el
+     * cartel no aparece.
+     */
+    logout: (state, action: PayloadAction<string | undefined>) => {
       secureStorageService.removeToken(SecureStorageKeys.AUTH_TOKEN);
       storageService.remove(StorageKeys.USER);
       state.user = null;
       state.isAuthenticated = false;
+      state.motivoDeSalida = action.payload ?? null;
+    },
+
+    /** Baja el cartel del login una vez leído. */
+    limpiarMotivoDeSalida: (state) => {
+      state.motivoDeSalida = null;
     },
   },
 });
 
-export const { setCredentials, setUser, logout } = authSlice.actions;
+export const { setCredentials, setUser, logout, limpiarMotivoDeSalida } = authSlice.actions;
 export const authReducer = authSlice.reducer;

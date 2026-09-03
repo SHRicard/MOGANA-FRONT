@@ -27,9 +27,10 @@ const provideListado = (result: UsuariosPagina | undefined) => [
  * el administrador ve clientes, el super admin ve todas las cuentas. Cuál se
  * llama lo decide `useListadoUsuarios`.
  *
- * 🚧 De la cuenta en sí es **solo lectura**: crear, editar y desactivar no
- * existen del lado del backend. Lo único que se le cambia a un cliente desde acá
- * es la marca de fiado; facturarle vive en `@/features/facturas`.
+ * 🚧 De la cuenta en sí es **casi solo lectura**: crear, editar y desactivar no
+ * existen del lado del backend. Desde acá se le cambian a un cliente la marca de
+ * fiado y el DNI; facturarle vive en `@/features/facturas`, y **cambiarle el
+ * rol** en `@/features/super-admin`, que es el único que tiene ese endpoint.
  */
 export const usuariosApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({

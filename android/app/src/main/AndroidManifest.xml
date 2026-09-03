@@ -19,9 +19,36 @@
         android:launchMode="singleTask"
         android:windowSoftInputMode="adjustResize"
         android:exported="true">
+        <!-- El launcher de siempre. -->
         <intent-filter>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+
+        <!--
+          Compartir un comprobante a Morgana (docs/compartir_comprobante.md 2.1).
+          Sin esto la app NO aparece en la hoja de compartir de Android.
+
+          Los DOS tipos, y los dos hacen falta:
+
+            image/*         la captura de pantalla, la foto del ticket
+            application/pdf lo que comparte Mercado Pago
+
+          Lo del PDF no es una suposicion: MP comparte el comprobante como
+          "application/pdf" desde su propio provider, verificado en el log del
+          telefono. Con solo image/* la app NO aparece en la hoja de MP, que es
+          justo el caso de uso que pidio el negocio. El backend solo guarda
+          imagenes, asi que el PDF lo convierte ShareIntentModule al entrar.
+
+          Una sola cosa por vez: NO va SEND_MULTIPLE. El backend acepta un
+          comprobante por aviso, asi que aparecer en el share de varios archivos
+          es prometer algo que despues hay que rechazar.
+        -->
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="image/*" />
+            <data android:mimeType="application/pdf" />
         </intent-filter>
       </activity>
     </application>

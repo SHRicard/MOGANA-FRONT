@@ -4,14 +4,29 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 // cambia sin que la persona haga nada, y es acá donde nos enteramos
 // (`docs/user_cliente_flujo.md` §12).
 import { MIS_DATOS } from '@/features/mi';
+// Y del de `avisos-de-pago`, otra: el id de cache de la bandeja del panel. Leer
+// que un cliente avisó un pago es enterarse de que esa bandeja tiene algo nuevo.
+import { AVISOS_DE_PAGO } from '@/features/avisos-de-pago';
+// Y del panel del store: el aviso de que se está llenando habla justo de eso.
+import { CONSUMO_DEL_STORE } from '@/features/store-comprobantes';
+// Y del chat, tres: el aviso de un mensaje es la noticia de que la conversación
+// de la que habla cambió.
+import { BANDEJA, MI_HILO, MI_RESUMEN } from '@/features/mensajes';
 import { baseApi } from '@/services/api';
 import { getApiErrorMessage } from '@/shared/utils';
 import { useAppDispatch } from '@/store';
-import { useLeerTodasMutation, useListarNotificacionesQuery, useMarcarLeidaMutation } from '../api';
+import {
+  useBorrarNotificacionMutation,
+  useBorrarTodasLasNotificacionesMutation,
+  useLeerTodasMutation,
+  useListarNotificacionesQuery,
+  useMarcarLeidaMutation,
+} from '../api';
 import {
   destinoDeAviso,
   esPagoResuelto,
   NOTIFICACIONES_LIMITE,
+  TiposNotificacion,
   type DestinoDeAviso,
   type ListarNotificacionesParams,
   type Notificacion,
@@ -49,6 +64,22 @@ export interface ListadoNotificaciones {
   leerTodas: () => void;
   /** Hay un "marcar todas" en vuelo. */
   marcandoTodas: boolean;
+
+  // ── Borrar ──
+  /**
+   * Saca un aviso de la campanita. **No pregunta**: es uno solo y se ve cuál.
+   *
+   * ⚠️ Del lado del backend es un **borrado blando**: la fila queda como prueba
+   * de qué se le comunicó a alguien y cuándo. Lo que se borra es de su vista.
+   */
+  borrar: (id: string) => void;
+  /** Abre la confirmación de vaciar todo. */
+  pedirVaciar: () => void;
+  confirmandoVaciar: boolean;
+  /** Vacía la campanita entera. **No se puede deshacer desde la app.** */
+  vaciar: () => void;
+  cancelarVaciar: () => void;
+  borrandoTodas: boolean;
 
   // ── Estados ──
   isLoading: boolean;
@@ -98,6 +129,12 @@ export function useNotificaciones(): ListadoNotificaciones {
   const dispatch = useAppDispatch();
   const [marcarLeidaMutation] = useMarcarLeidaMutation();
   const [leerTodasMutation, { isLoading: marcandoTodas }] = useLeerTodasMutation();
+  const [borrarUnaMutation] = useBorrarNotificacionMutation();
+  const [borrarTodasMutation, { isLoading: borrandoTodas }] =
+    useBorrarTodasLasNotificacionesMutation();
+
+  /** `true` mientras está abierta la confirmación de vaciar la campanita. */
+  const [confirmandoVaciar, setConfirmandoVaciar] = useState(false);
 
   /**
    * Cada combinación de params es una entrada de cache distinta, así que `data`
@@ -149,6 +186,48 @@ export function useNotificaciones(): ListadoNotificaciones {
         dispatch(baseApi.util.invalidateTags([{ type: 'Factura', id: MIS_DATOS }]));
       }
 
+      /*
+        Lo mismo del otro lado del mostrador: este aviso dice que un cliente
+        acaba de avisar un pago, así que la bandeja del panel tiene uno más del
+        que sabía. Sin esto, tocar la notificación abre una lista cacheada
+        **sin el aviso del que habla la notificación**, que es exactamente lo
+        que se fue a ver.
+      */
+      if (notificacion.tipo === TiposNotificacion.PAGO_INFORMADO) {
+        dispatch(baseApi.util.invalidateTags([{ type: 'Factura', id: AVISOS_DE_PAGO }]));
+      }
+
+      /*
+        El aviso de que el store se está llenando habla de un número que cambia:
+        entre que el cron lo publicó y alguien lo toca pudo haberse limpiado. Sin
+        esto, el panel abre con el consumo cacheado y muestra la alarma vieja.
+      */
+      if (notificacion.tipo === TiposNotificacion.STORE_LLENO) {
+        dispatch(baseApi.util.invalidateTags([{ type: 'Factura', id: CONSUMO_DEL_STORE }]));
+      }
+
+      /*
+        Y lo mismo con el chat, de los dos lados. El aviso de un mensaje es, por
+        definición, la noticia de que la conversación cambió: abrirla con la
+        cache de antes mostraría el hilo **sin el mensaje del que habla el
+        aviso**, que es exactamente lo que se fue a leer.
+
+        Se invalida el hilo entero y no un renglón: los mensajes no se editan, y
+        pedir de nuevo una página de treinta es más barato que mantener un
+        parche que puede quedar mal.
+      */
+      if (notificacion.tipo === TiposNotificacion.MENSAJE_DEL_NEGOCIO) {
+        dispatch(
+          baseApi.util.invalidateTags([
+            { type: 'Mensaje', id: MI_HILO },
+            { type: 'Mensaje', id: MI_RESUMEN },
+          ]),
+        );
+      }
+      if (notificacion.tipo === TiposNotificacion.MENSAJE_DEL_CLIENTE) {
+        dispatch(baseApi.util.invalidateTags([{ type: 'Mensaje', id: BANDEJA }]));
+      }
+
       return destinoDeAviso(notificacion);
     },
     [marcarLeidaMutation, params, dispatch],
@@ -159,6 +238,44 @@ export function useNotificaciones(): ListadoNotificaciones {
       .unwrap()
       .catch(() => {});
   }, [leerTodasMutation]);
+
+  /**
+   * Sacar un aviso de la campanita.
+   *
+   * ⚠️ **No se pregunta antes**: es uno solo, se ve cuál, y el gesto ya es
+   * deliberado. La confirmación se guarda para vaciar todo, que es lo que no se
+   * puede deshacer de a poco.
+   *
+   * ⚠️ **Es un borrado blando del lado del backend**: la fila queda como prueba
+   * de qué se le comunicó a alguien y cuándo. Lo que se borra es de su vista.
+   */
+  const borrar = useCallback(
+    (id: string) => {
+      // El error no se muestra: lo peor que pasa es que el aviso siga ahí, y el
+      // listado se vuelve a pedir igual por la invalidación.
+      borrarUnaMutation(id)
+        .unwrap()
+        .catch(() => {});
+    },
+    [borrarUnaMutation],
+  );
+
+  const pedirVaciar = useCallback(() => setConfirmandoVaciar(true), []);
+  const cancelarVaciar = useCallback(() => setConfirmandoVaciar(false), []);
+
+  /**
+   * Vaciar la campanita entera.
+   *
+   * ⚠️ **No hay forma de deshacerlo desde la app**, así que la pantalla pregunta
+   * antes con el número delante —"¿borrar los 7 avisos?"—. La fila queda en la
+   * base, pero no hay endpoint para traerla de vuelta.
+   */
+  const vaciar = useCallback(() => {
+    borrarTodasMutation()
+      .unwrap()
+      .then(() => setConfirmandoVaciar(false))
+      .catch(() => setConfirmandoVaciar(false));
+  }, [borrarTodasMutation]);
 
   const irAPagina = useCallback((destino: number) => setPagina(destino), []);
 
@@ -184,6 +301,13 @@ export function useNotificaciones(): ListadoNotificaciones {
     abrir,
     leerTodas,
     marcandoTodas,
+
+    borrar,
+    pedirVaciar,
+    confirmandoVaciar,
+    vaciar,
+    cancelarVaciar,
+    borrandoTodas,
 
     isLoading: isLoading && ultima.current === null,
     isFetching,

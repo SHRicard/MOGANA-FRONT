@@ -1,7 +1,10 @@
 import type { ComponentType } from 'react';
-import ChartColumn from 'lucide-react-native/icons/chart-column';
-import Megaphone from 'lucide-react-native/icons/megaphone';
+import BanknoteArrowUp from 'lucide-react-native/icons/banknote-arrow-up';
 import Boxes from 'lucide-react-native/icons/boxes';
+import ChartColumn from 'lucide-react-native/icons/chart-column';
+import HardDrive from 'lucide-react-native/icons/hard-drive';
+import Megaphone from 'lucide-react-native/icons/megaphone';
+import MessageSquare from 'lucide-react-native/icons/message-square';
 import PackageSearch from 'lucide-react-native/icons/package-search';
 import ReceiptText from 'lucide-react-native/icons/receipt-text';
 import Tags from 'lucide-react-native/icons/tags';
@@ -41,6 +44,27 @@ export interface PanelItem {
  * contesta `403` si alguien llega por otro camino.
  */
 export const PANEL_ITEMS: readonly PanelItem[] = [
+  {
+    id: 'avisos-de-pago',
+    label: 'Avisos de pago',
+    // Va PRIMERO, y es lo único de este panel que no es una consulta: acá hay
+    // gente esperando una respuesta. Las métricas se miran cuando uno quiere;
+    // un aviso sin resolver es un cliente que pagó y le sigue figurando la
+    // deuda.
+    description: 'Quién dice que pagó, con su comprobante',
+    icon: BanknoteArrowUp,
+    route: RootRoutes.AVISOS_DE_PAGO,
+  },
+  {
+    id: 'mensajes',
+    label: 'Mensajes',
+    // Segundo, y por lo mismo que el primero: del otro lado hay alguien
+    // esperando. Va debajo de los avisos de pago porque una pregunta puede
+    // esperar unas horas y un pago sin confirmar deja una deuda mal puesta.
+    description: 'Lo que te escriben los clientes',
+    icon: MessageSquare,
+    route: RootRoutes.BANDEJA_MENSAJES,
+  },
   {
     id: 'metricas',
     label: 'Métricas',
@@ -97,6 +121,15 @@ export const PANEL_ITEMS: readonly PanelItem[] = [
     description: 'Con qué agrupás lo que vendés',
     icon: Tags,
     route: RootRoutes.ESPECIES,
+  },
+  {
+    id: 'store-comprobantes',
+    label: 'Comprobantes guardados',
+    // Va con las de mantenimiento, después de lo que se mira todos los días: se
+    // entra cuando el store se está llenando, no a diario.
+    description: 'Cuánto ocupan y qué podés liberar',
+    icon: HardDrive,
+    route: RootRoutes.STORE_COMPROBANTES,
   },
   {
     id: 'anuncios',

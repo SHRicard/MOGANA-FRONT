@@ -4,8 +4,10 @@ import Files from 'lucide-react-native/icons/files';
 import LayoutDashboard from 'lucide-react-native/icons/layout-dashboard';
 import LifeBuoy from 'lucide-react-native/icons/life-buoy';
 import LogOut from 'lucide-react-native/icons/log-out';
+import MessageSquare from 'lucide-react-native/icons/message-square';
 import Send from 'lucide-react-native/icons/send';
 import Settings from 'lucide-react-native/icons/settings';
+import ServerCog from 'lucide-react-native/icons/server-cog';
 import ShoppingBasket from 'lucide-react-native/icons/shopping-basket';
 import User from 'lucide-react-native/icons/user';
 import Users from 'lucide-react-native/icons/users';
@@ -75,6 +77,28 @@ const TODOS = [Roles.SUPER_ADMIN, Roles.ADMINISTRADOR, Roles.CLIENTE] as const;
 const ADMINISTRACION = [Roles.SUPER_ADMIN, Roles.ADMINISTRADOR] as const;
 
 /**
+ * Solo el cliente. Es para las filas de **la cuenta propia como cliente**: sus
+ * facturas, sus avisos de pago, lo que compra.
+ *
+ * ⚠️ No es un permiso: la API contesta esas rutas para cualquier rol —el dueño
+ * sale del token, no hay id de persona— y un administrador que entre ve la suya,
+ * vacía. Están escondidas porque **el negocio no se factura a sí mismo**: tres
+ * filas que para el dueño siempre van a estar vacías son ruido en el único menú
+ * donde busca sus herramientas.
+ */
+const SOLO_CLIENTE = [Roles.CLIENTE] as const;
+
+/**
+ * Solo el dueño del sistema. Es para lo que **no** ve el administrador: las
+ * cuentas de administración, los cambios de rol y el estado de la instalación
+ * (`docs/README_FRONT_SUPER_ADMIN.md`).
+ *
+ * Acá sí es un permiso y no solo orden: los cinco endpoints de ese panel piden
+ * rol `super_admin` y le contestan `403` a cualquier otro.
+ */
+const SOLO_SUPER_ADMIN = [Roles.SUPER_ADMIN] as const;
+
+/**
  * Catálogo del panel "Más", en orden de aparición. Fuente única: agregar una
  * opción es sumar una entrada acá.
  *
@@ -87,6 +111,19 @@ const ADMINISTRACION = [Roles.SUPER_ADMIN, Roles.ADMINISTRADOR] as const;
  */
 export const MENU_ITEMS: readonly MenuItem[] = [
   // ── Solo administración ──
+  {
+    id: 'system-panel',
+    // "Del sistema" y no "de super admin": dice de QUÉ habla la pantalla, no
+    // quién entra. El rol ya lo filtra la fila.
+    label: 'Panel del sistema',
+    // La distinción con la fila de abajo está en el texto: una mira el sistema
+    // y la otra el negocio. Sin eso, dos filas que empiezan con "Panel" se leen
+    // como la misma cosa dos veces.
+    description: 'Cuentas, roles y estado de la instalación',
+    icon: ServerCog,
+    roles: SOLO_SUPER_ADMIN,
+    route: RootRoutes.PANEL_SUPER_ADMIN,
+  },
   {
     id: 'admin-panel',
     label: 'Panel de administración',
@@ -113,12 +150,16 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     route: RootRoutes.USUARIOS,
   },
 
-  // ── Lo mío: la cuenta propia (`docs/user_cliente_flujo.md`) ──
+  // ── Lo mío: la cuenta propia como cliente (`docs/user_cliente_flujo.md`) ──
   //
-  // Las ve CUALQUIER rol y no solo el cliente, igual que "Mi cuenta": la API no
-  // acepta un id de persona —el dueño sale del token—, así que un administrador
-  // que entre ve la suya, normalmente vacía. Esconderlas por rol daría a
-  // entender que hay un permiso donde no lo hay.
+  // Solo el cliente, y acá se separan de "Mi cuenta", que sí ven todos: los
+  // datos de contacto los tiene cualquiera, pero **el negocio no se factura a
+  // sí mismo**. Para el dueño estas tres pantallas están vacías por definición,
+  // y una fila que siempre lleva a un vacío no informa nada — tapa las que sí.
+  //
+  // ⚠️ Esconderlas es una decisión de menú, no un permiso: las rutas siguen
+  // registradas y la API contesta igual para cualquier rol (el dueño sale del
+  // token, no hay id de persona). Un aviso viejo que apunte ahí sigue abriendo.
   //
   // La factura y el aviso de pago no están acá porque no se entra a ellos desde
   // el menú: se llega desde una factura concreta.
@@ -127,7 +168,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     label: 'Mis facturas',
     description: 'Todo lo que te facturamos y cuánto queda por pagar',
     icon: Files,
-    roles: TODOS,
+    roles: SOLO_CLIENTE,
     route: RootRoutes.MIS_FACTURAS,
   },
   {
@@ -137,15 +178,26 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     // "avisé que pagué, ¿y?".
     description: 'En qué quedó cada pago que avisaste',
     icon: Send,
-    roles: TODOS,
+    roles: SOLO_CLIENTE,
     route: RootRoutes.MIS_AVISOS,
+  },
+  {
+    id: 'mis-mensajes',
+    // "Con el local" y no "Chat": dice CON QUIÉN se habla, que es la pregunta
+    // que uno se hace antes de entrar. Un chat con nadie en particular podría
+    // ser soporte técnico, y no lo es.
+    label: 'Mensajes con el local',
+    description: 'Preguntá por una factura o por un pago',
+    icon: MessageSquare,
+    roles: SOLO_CLIENTE,
+    route: RootRoutes.MIS_MENSAJES,
   },
   {
     id: 'mis-compras',
     label: 'Qué comprás',
     description: 'Lo que te llevás y cómo viene cambiando',
     icon: ShoppingBasket,
-    roles: TODOS,
+    roles: SOLO_CLIENTE,
     route: RootRoutes.MIS_COMPRAS,
   },
 

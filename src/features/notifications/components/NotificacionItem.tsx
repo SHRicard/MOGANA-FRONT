@@ -1,18 +1,25 @@
 import { memo, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import X from 'lucide-react-native/icons/x';
 import { Text } from '@/shared/ui/atoms/Text';
 import { formatFechaHora } from '@/shared/utils';
 import { useTheme, type Theme } from '@/theme';
-import { sinLeer, type Notificacion } from '../types';
+import { llevaAAlgunLado, sinLeer, type Notificacion } from '../types';
 
 export interface NotificacionItemProps {
   notificacion: Notificacion;
   /** Se llama al tocarlo. La pantalla decide qué hacer (marcarlo leído). */
   onPress: (notificacion: Notificacion) => void;
+  /** Sacarlo de la campanita. Sin esto no se dibuja la cruz. */
+  onBorrar?: (id: string) => void;
 }
 
 /** Lado del punto que marca los sin leer. */
 const PUNTO = 8;
+
+const ICON_SIZE = 16;
+/** Alto del área táctil de la cruz. */
+const CERRAR_SIZE = 32;
 
 /**
  * Un aviso de la lista.
@@ -25,16 +32,22 @@ const PUNTO = 8;
  * Los sin leer se marcan con **punto y negrita**, no solo con el fondo: el color
  * de fondo solo no lo distingue quien no ve bien los contrastes suaves.
  *
+ * ⚠️ **Se dibuja como tocable solo si el aviso lleva a algún lado.** Un anuncio
+ * es texto y nada más: si se viera como un botón y no hiciera nada, se sentiría
+ * roto. Eso lo dice el `destino` que manda el backend, no el tipo.
+ *
  * Sin lógica de negocio: recibe el aviso y avisa cuándo lo tocaron. **A dónde
  * lleva lo decide la pantalla**, que es la única que conoce el router.
  */
-function NotificacionItemComponent({ notificacion, onPress }: NotificacionItemProps) {
+function NotificacionItemComponent({ notificacion, onPress, onBorrar }: NotificacionItemProps) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const nuevo = sinLeer(notificacion);
+  const abre = llevaAAlgunLado(notificacion);
 
   const tocar = useCallback(() => onPress(notificacion), [onPress, notificacion]);
+  const borrar = useCallback(() => onBorrar?.(notificacion.id), [onBorrar, notificacion.id]);
 
   return (
     <Pressable
@@ -44,15 +57,17 @@ function NotificacionItemComponent({ notificacion, onPress }: NotificacionItemPr
         nuevo && styles.cardNueva,
         pressed && styles.presionada,
       ]}
-      accessibilityRole="button"
+      accessibilityRole={abre ? 'button' : 'text'}
       // El estado entra en el label y no solo en el dibujo: "sin leer" es lo
       // primero que necesita saber quien escucha la lista.
       accessibilityLabel={`${nuevo ? 'Sin leer. ' : ''}${notificacion.titulo}. ${
         notificacion.mensaje
       }`}
-      // No promete a dónde lleva: eso lo decide el tipo del aviso, que este
-      // componente no mira. Lo que sí es seguro es que tocarlo lo marca leído.
-      accessibilityHint={nuevo ? 'Tocá para marcarlo como leído y abrirlo' : undefined}
+      // No promete A DÓNDE lleva —eso sale del `destino`, que este componente no
+      // traduce—, solo que hay algo para abrir.
+      accessibilityHint={
+        abre ? 'Tocá para abrirlo' : nuevo ? 'Tocá para marcarlo como leído' : undefined
+      }
     >
       <View style={styles.encabezado}>
         {/* Decorativo: que está sin leer ya lo dice el `accessibilityLabel`. */}
@@ -69,6 +84,23 @@ function NotificacionItemComponent({ notificacion, onPress }: NotificacionItemPr
             {notificacion.titulo}
           </Text>
         </View>
+
+        {/*
+          Sacarlo de la campanita. No pregunta: es uno solo y se ve cuál. Va como
+          `Pressable` propio adentro de la tarjeta —no como gesto de deslizar—
+          porque un gesto oculto no se descubre solo.
+        */}
+        {onBorrar ? (
+          <Pressable
+            onPress={borrar}
+            hitSlop={theme.spacing.sm}
+            style={styles.cerrar}
+            accessibilityRole="button"
+            accessibilityLabel={`Borrar el aviso: ${notificacion.titulo}`}
+          >
+            <X size={ICON_SIZE} color={theme.colors.textMuted} />
+          </Pressable>
+        ) : null}
       </View>
 
       <Text variant="small" color={nuevo ? 'text' : 'textMuted'}>
@@ -114,4 +146,12 @@ const createStyles = (theme: Theme) =>
 
     /** Ocupa lo que sobra de la fila: ver el comentario del JSX. */
     titulo: { flex: 1 },
+
+    cerrar: {
+      width: CERRAR_SIZE,
+      height: CERRAR_SIZE,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.radius.full,
+    },
   });

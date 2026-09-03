@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import BellOff from 'lucide-react-native/icons/bell-off';
+import Trash2 from 'lucide-react-native/icons/trash-2';
 import WifiOff from 'lucide-react-native/icons/wifi-off';
 // Rutas profundas y no el barrel `@/app/navigation`: ese barrel arrastra el
 // RootNavigator, que registra esta pantalla → ciclo en runtime.
@@ -17,6 +18,7 @@ import { EstadosFactura } from '@/features/facturas/types';
 import { useRefrescar } from '@/shared/hooks';
 import { Button } from '@/shared/ui/atoms/Button';
 import { Chip } from '@/shared/ui/atoms/Chip';
+import { Dialogo, DIALOGO_ICON_SIZE } from '@/shared/ui/atoms/Dialogo';
 import { EmptyState, EMPTY_STATE_ICON_SIZE } from '@/shared/ui/atoms/EmptyState';
 import { Link } from '@/shared/ui/atoms/Link';
 import { Paginacion } from '@/shared/ui/atoms/Paginacion';
@@ -24,7 +26,7 @@ import { Text } from '@/shared/ui/atoms/Text';
 import { useTheme, type Theme } from '@/theme';
 import { NotificacionItem } from '../components';
 import { useNotificaciones } from '../hooks';
-import type { Notificacion } from '../types';
+import { PantallasDeAviso, type Notificacion } from '../types';
 
 const keyExtractor = (notificacion: Notificacion) => notificacion.id;
 
@@ -44,9 +46,10 @@ const Separador = memo(function SeparadorComponent() {
  * correo; la app no lo arma ni lo resume.
  *
  * Tocar un aviso lo marca leído **y abre lo que está diciendo**
- * (`docs/user_cliente_flujo.md` §11): los de pago llevan a la factura, el de
- * deuda a las vencidas. Los que no llevan a ningún lado —un anuncio, o el
- * `pago_informado` que es del administrador— solo se marcan.
+ * (`docs/user_cliente_flujo.md` §11): los de pago resuelto llevan a la factura,
+ * el de deuda a las vencidas, y el `pago_informado` —que es del administrador—
+ * a la bandeja del panel, que es donde se resuelve. Un anuncio no lleva a ningún
+ * lado: solo se marca.
  *
  * ⚠️ **A dónde va cada uno lo decide `destinoDeAviso`, por `tipo`.** Acá solo se
  * traduce ese destino a un nombre de ruta: el resto de la feature no conoce el
@@ -70,17 +73,96 @@ export function NotificationsScreen() {
    */
   const abrir = useCallback(
     (notificacion: Notificacion) => {
+      // Marcar leído no bloquea la navegación: si falla, el globito se corrige
+      // solo en el próximo listado.
       const destino = listado.abrir(notificacion);
-      if (destino === null) {
+
+      /*
+        ⚠️ El `if` no es defensivo de más y el `switch` no tiene `default` por
+        accidente: `destino` es `null` en los anuncios, y una versión más nueva
+        del backend puede mandar una `pantalla` que esta build todavía no
+        conoce. En los dos casos el aviso se lee igual y no se navega — nunca se
+        rompe.
+      */
+      if (!destino) {
+        /*
+          Un anuncio no lleva a ningún lado y esto es lo correcto. Pero es
+          TAMBIÉN lo que se ve cuando el backend todavía no manda `destino`: el
+          aviso se lee, no navega, y no hay ni un error. Este renglón es la
+          diferencia entre las dos cosas — sin él, un servidor viejo se
+          diagnostica a mano.
+        */
+        if (__DEV__ && notificacion.destino === undefined) {
+          console.warn(
+            `[avisos] El aviso "${notificacion.tipo}" llegó sin el campo "destino". ` +
+              'Si esperabas que abriera una pantalla, el backend que está contestando es anterior ' +
+              'a ese campo: reinicialo. La app no adivina el destino a propósito (docs/notificaciones.md).',
+          );
+        }
         return;
       }
-      if (destino.destino === 'factura') {
-        navigation.navigate(RootRoutes.MI_FACTURA, { facturaId: destino.facturaId });
-        return;
+
+      switch (destino.pantalla) {
+        case PantallasDeAviso.UNA_FACTURA:
+          /*
+            ⚠️ El `id` puede venir `null` en una pantalla que normalmente lo
+            lleva: son los avisos guardados antes de que `datos` trajera ese
+            campo. Se cae en la lista en vez de romper.
+          */
+          if (destino.id) {
+            navigation.navigate(RootRoutes.MI_FACTURA, { facturaId: destino.id });
+          } else {
+            navigation.navigate(RootRoutes.MIS_FACTURAS);
+          }
+          return;
+
+        case PantallasDeAviso.MIS_FACTURAS:
+          /*
+            El filtro va por la PANTALLA y no por el tipo del aviso: lo único que
+            manda a `mis_facturas` es la deuda vencida, así que abrir con las
+            vencidas puestas es una propiedad de ese destino. Llevar a "todas"
+            obligaría a buscar de cuál habla.
+          */
+          navigation.navigate(RootRoutes.MIS_FACTURAS, { estado: EstadosFactura.VENCIDA });
+          return;
+
+        case PantallasDeAviso.BANDEJA_DE_PAGOS:
+          /*
+            Un cliente avisó que pagó y hay que resolverlo. La bandeja abre en
+            los pendientes, así que el aviso recién llegado está a la vista sin
+            tocar ningún filtro.
+
+            🚧 El backend manda además el id del aviso; todavía no se usa.
+            Destacar esa tarjeta obligaría a saber en qué página cayó —la
+            bandeja pagina y ordena del más viejo al más nuevo—, y eso es otra
+            tarea.
+          */
+          navigation.navigate(RootRoutes.AVISOS_DE_PAGO);
+          return;
+
+        case PantallasDeAviso.STORE_DE_COMPROBANTES:
+          // Se está llenando el lugar de los comprobantes: se va a borrar.
+          navigation.navigate(RootRoutes.STORE_COMPROBANTES);
+          return;
+
+        case PantallasDeAviso.MIS_MENSAJES:
+          // El cliente tiene un solo hilo: no hay nada que elegir.
+          navigation.navigate(RootRoutes.MIS_MENSAJES);
+          return;
+
+        case PantallasDeAviso.BANDEJA_DE_MENSAJES:
+          /*
+            ⚠️ Acá el `id` es **el cliente**, no el mensaje: la bandeja tiene un
+            hilo por persona. Sin id se cae en la bandeja completa, que sigue
+            siendo el lugar correcto — el hilo con algo sin leer está arriba.
+          */
+          if (destino.id) {
+            navigation.navigate(RootRoutes.HILO_DEL_CLIENTE, { clienteId: destino.id });
+          } else {
+            navigation.navigate(RootRoutes.BANDEJA_MENSAJES);
+          }
+          return;
       }
-      // El aviso habla de lo que ya venció, así que la lista abre con ese filtro
-      // puesto: llevar a "todas" obligaría a buscar de cuál habla.
-      navigation.navigate(RootRoutes.MIS_FACTURAS, { estado: EstadosFactura.VENCIDA });
     },
     [listado, navigation],
   );
@@ -98,9 +180,9 @@ export function NotificationsScreen() {
    */
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Notificacion>) => (
-      <NotificacionItem notificacion={item} onPress={abrir} />
+      <NotificacionItem notificacion={item} onPress={abrir} onBorrar={listado.borrar} />
     ),
-    [abrir],
+    [abrir, listado.borrar],
   );
 
   /**
@@ -124,16 +206,28 @@ export function NotificationsScreen() {
         />
       </View>
 
-      {/* Solo cuando hay algo que marcar: un "marcar todas" con el globito
-          vacío es un botón que no hace nada. */}
-      {listado.noLeidas > 0 && (
-        <Link
-          label="Marcar todas"
-          variant="caption"
-          onPress={listado.leerTodas}
-          disabled={listado.marcandoTodas}
-        />
-      )}
+      <View style={styles.acciones}>
+        {/* Solo cuando hay algo que marcar: un "marcar todas" con el globito
+            vacío es un botón que no hace nada. */}
+        {listado.noLeidas > 0 && (
+          <Link
+            label="Marcar todas"
+            variant="caption"
+            onPress={listado.leerTodas}
+            disabled={listado.marcandoTodas}
+          />
+        )}
+
+        {/* Lo mismo del otro lado: vaciar una campanita vacía no hace nada. */}
+        {listado.total > 0 && (
+          <Link
+            label="Borrar todos"
+            variant="caption"
+            onPress={listado.pedirVaciar}
+            disabled={listado.borrandoTodas}
+          />
+        )}
+      </View>
     </View>
   );
 
@@ -236,6 +330,40 @@ export function NotificationsScreen() {
           />
         </View>
       )}
+
+      {/*
+        ⚠️ **Vaciar la campanita no se puede deshacer desde la app**, así que se
+        pregunta con el número delante. Del lado del backend la fila queda —un
+        aviso es la prueba de qué se le comunicó a alguien y cuándo— pero no hay
+        endpoint para traerla de vuelta.
+
+        Hermano de la lista y no adentro: es una view absoluta, así que tiene que
+        colgar de la raíz para tapar todo.
+      */}
+      <Dialogo
+        visible={listado.confirmandoVaciar}
+        onClose={listado.cancelarVaciar}
+        cerrarAlTocarFondo={false}
+        tono="peligro"
+        icono={<Trash2 size={DIALOGO_ICON_SIZE} color={theme.colors.error} />}
+        titulo={`Borrar ${listado.total} ${listado.total === 1 ? 'aviso' : 'avisos'}`}
+        descripcion="Se van de tu campanita y no se pueden recuperar. Lo que ya te avisamos sigue valiendo igual."
+        acciones={[
+          {
+            label: 'Borrar todos',
+            onPress: listado.vaciar,
+            variant: 'danger',
+            loading: listado.borrandoTodas,
+            disabled: listado.borrandoTodas,
+          },
+          {
+            label: 'Cancelar',
+            onPress: listado.cancelarVaciar,
+            variant: 'secondary',
+            disabled: listado.borrandoTodas,
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -259,6 +387,8 @@ const createStyles = (theme: Theme) =>
     contentSinPie: { paddingBottom: theme.spacing.lg },
     contentConPie: { paddingBottom: theme.spacing.md },
 
+    /** Los dos enlaces de la derecha: marcar todas y borrar todos. */
+    acciones: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
     filtros: {
       flexDirection: 'row',
       alignItems: 'center',

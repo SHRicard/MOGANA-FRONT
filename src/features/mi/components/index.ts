@@ -1,4 +1,5 @@
 export { AvisosSinResolver } from './AvisosSinResolver';
+export { ComprobanteAdjunto } from './ComprobanteAdjunto';
 export { ChipDeTendencia } from './ChipDeTendencia';
 export { ComoVengoComprando } from './ComoVengoComprando';
 export { EspecieQueComproItem } from './EspecieQueComproItem';
@@ -10,9 +11,12 @@ export { MiPagoItem } from './MiPagoItem';
 export { OPCIONES_DE_MIS_AVISOS, OPCIONES_DE_MIS_FACTURAS } from './opcionesDeMisFiltros';
 export { RenglonDeMiFactura } from './RenglonDeMiFactura';
 export { ResumenDeMiCuenta } from './ResumenDeMiCuenta';
+export { SelectorDeComprobante } from './SelectorDeComprobante';
+export { SelectorDeFactura } from './SelectorDeFactura';
 export { SelectorDeMedio } from './SelectorDeMedio';
 
 export type { AvisosSinResolverProps } from './AvisosSinResolver';
+export type { ComprobanteAdjuntoProps } from './ComprobanteAdjunto';
 export type { ChipDeTendenciaProps } from './ChipDeTendencia';
 export type { ComoVengoComprandoProps } from './ComoVengoComprando';
 export type { EspecieQueComproItemProps } from './EspecieQueComproItem';
@@ -23,4 +27,6 @@ export type { MiFacturaItemProps } from './MiFacturaItem';
 export type { MiPagoItemProps } from './MiPagoItem';
 export type { RenglonDeMiFacturaProps } from './RenglonDeMiFactura';
 export type { ResumenDeMiCuentaProps } from './ResumenDeMiCuenta';
+export type { SelectorDeComprobanteProps } from './SelectorDeComprobante';
+export type { SelectorDeFacturaProps } from './SelectorDeFactura';
 export type { SelectorDeMedioProps } from './SelectorDeMedio';

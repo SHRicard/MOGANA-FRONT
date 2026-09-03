@@ -9,6 +9,7 @@ import FileText from 'lucide-react-native/icons/file-text';
 import HandCoins from 'lucide-react-native/icons/hand-coins';
 import IdCard from 'lucide-react-native/icons/id-card';
 import ShieldAlert from 'lucide-react-native/icons/shield-alert';
+import UserMinus from 'lucide-react-native/icons/user-minus';
 import UserX from 'lucide-react-native/icons/user-x';
 import WifiOff from 'lucide-react-native/icons/wifi-off';
 // Rutas profundas y no el barrel `@/app/navigation`: ese barrel arrastra el
@@ -24,7 +25,14 @@ import { formatearDni, formatFechaHora } from '@/shared/utils';
 import { useTheme, type Theme } from '@/theme';
 import { AvatarIniciales, BloquearFiadoDialogo, CargarDniDialogo } from '../components';
 import { useCargarDni, useCliente, useFiado } from '../hooks';
-import { faltaDni, identificadorUsuario, nombreUsuario, rolLabel, sinFiado } from '../types';
+import {
+  estaDadaDeBaja,
+  faltaDni,
+  identificadorUsuario,
+  nombreUsuario,
+  rolLabel,
+  sinFiado,
+} from '../types';
 
 type ClienteRoute = RouteProp<RootStackParamList, typeof RootRoutes.CLIENTE>;
 
@@ -219,10 +227,40 @@ export function ClienteScreen() {
                 {/* Las dos marcas al lado del rol: es lo primero que hay que ver
                     de esta persona. Ámbar es un dato que falta —se completa—;
                     rojo es una advertencia sobre ella. */}
+                {estaDadaDeBaja(ficha.cliente) && <Chip label="Dada de baja" tone="danger" />}
                 {faltaDni(ficha.cliente) && <Chip label="Falta el DNI" tone="warning" />}
                 {sinFiado(ficha.cliente) && <Chip label="No se le fía" tone="danger" />}
               </View>
             </View>
+
+            {/*
+              ── Se dio de baja (`docs/README_FRONT_BAJA_DE_CUENTA.md` §8) ──
+
+              Está acá arriba y no al pie porque **cambia cómo se la trata**:
+              sigue en el listado y en el tablero porque hay algo que cobrarle,
+              pero ya no entra a la app. Sin este cartel, quien la llame le va a
+              decir "fijate en la app" y la persona no va a poder.
+            */}
+            {estaDadaDeBaja(ficha.cliente) && (
+              <View style={styles.dadaDeBaja} accessible accessibilityRole="alert">
+                <View style={styles.sinFiadoTitulo}>
+                  <UserMinus size={ICON_SIZE} color={theme.colors.error} />
+                  <Text variant="small" weight="semibold" color="error">
+                    Pidió eliminar su cuenta
+                  </Text>
+                </View>
+                {ficha.cliente.dadaDeBajaEn ? (
+                  <Text variant="small" color="textMuted">
+                    {`El ${formatFechaHora(ficha.cliente.dadaDeBajaEn)}.`}
+                  </Text>
+                ) : null}
+                <Text variant="caption" color="textMuted">
+                  Ya no puede entrar a la app, así que no la mandes ahí: hablale por teléfono o por
+                  correo. De su perfil quedó solo lo que hace falta para avisarle de la deuda, y
+                  cuando la salde se borra todo solo.
+                </Text>
+              </View>
+            )}
 
             {/* ── El documento ── */}
             <View style={styles.seccion}>
@@ -551,6 +589,14 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.colors.border,
+      borderRadius: theme.radius.lg,
+    },
+
+    /** Mismo rojo que el corte de fiado: las dos son advertencias, no faltantes. */
+    dadaDeBaja: {
+      gap: theme.spacing.xxs,
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.errorMuted,
       borderRadius: theme.radius.lg,
     },
 

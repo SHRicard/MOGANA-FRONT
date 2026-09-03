@@ -1,12 +1,20 @@
 import {
+  aCuerpoConComprobante,
   aInformarPagoPayload,
   aTendencia,
+  comprobanteObligatorio,
+  REGLA_DEL_COMPROBANTE,
+  TIPOS_DE_COMPROBANTE,
+  tipoDeComprobanteAceptado,
   crearInformarPagoSchema,
   cuandoVence,
   esMiFacturaAnulada,
   ESTADO_DE_MI_CUENTA,
   formatParticipacion,
   formatVariacion,
+  MAX_COMPROBANTE_BYTES,
+  MEDIOS_CON_COMPROBANTE,
+  MediosDePago,
   miAvisoDePagoSchema,
   miCuentaSchema,
   miFacturaSchema,
@@ -24,6 +32,7 @@ import {
   type MiAvisoDePago,
   type MiFactura,
 } from './types';
+import type { ComprobanteCompartido } from '@/services/share';
 
 /**
  * Los payloads son los del `docs/user_cliente_flujo.md`, copiados tal cual: si
@@ -643,5 +652,305 @@ describe('ESTADO_DE_MI_CUENTA', () => {
   it('le habla a quien debe', () => {
     expect(ESTADO_DE_MI_CUENTA.al_dia).toBe('Estás al día');
     expect(ESTADO_DE_MI_CUENTA.vencida).toBe('Tenés algo vencido');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Compartir el comprobante (`docs/compartir_comprobante.md`)
+// ─────────────────────────────────────────────────────────────
+describe('miAvisoDePagoSchema con comprobante', () => {
+  /** El `201` de §7, copiado tal cual. */
+  const conComprobante = {
+    ...aviso,
+    comprobante: {
+      estado: 'disponible',
+      url: 'https://res.cloudinary.com/demo/image/upload/s--abc--/comprobante.jpg',
+      miniatura: 'https://res.cloudinary.com/demo/image/upload/s--xyz--/mini.jpg',
+    },
+  };
+
+  it('lee el comprobante del 201', () => {
+    const leido = miAvisoDePagoSchema.parse(conComprobante);
+    expect(leido.comprobante?.estado).toBe('disponible');
+    expect(leido.comprobante?.miniatura).toContain('res.cloudinary.com');
+  });
+
+  /**
+   * Se avisa igual sin comprobante desde el formulario de adentro de la app, y
+   * los avisos viejos son anteriores a que esto existiera. Un aviso sin imagen
+   * no puede tirar abajo la pantalla entera por el `catchSchemaFailure`.
+   */
+  it('el comprobante es opcional', () => {
+    expect(miAvisoDePagoSchema.safeParse(aviso).success).toBe(true);
+    expect(miAvisoDePagoSchema.safeParse({ ...aviso, comprobante: null }).success).toBe(true);
+  });
+
+  /**
+   * `estado` es texto libre: la app no ramifica por él —lo que decide si se
+   * muestra algo es que haya `url`— así que un valor nuevo del backend tiene que
+   * entrar sin romper nada.
+   */
+  it('acepta un estado que la app no conoce, y sin links', () => {
+    const guardandose = {
+      ...aviso,
+      comprobante: { estado: 'procesando', url: null, miniatura: null },
+    };
+    expect(miAvisoDePagoSchema.safeParse(guardandose).success).toBe(true);
+  });
+});
+
+describe('aCuerpoConComprobante', () => {
+  const comprobante: ComprobanteCompartido = {
+    archivo: 'file:///data/user/0/com.morgana/cache/comprobantes/comprobante-1756661331000.jpg',
+    mimeType: 'image/jpeg',
+    nombre: 'comprobante-1756661331000.jpg',
+    recibidoEn: 1756661331000,
+  };
+
+  const datos = {
+    monto: 8810.5,
+    medio: 'transferencia',
+    fecha: '2026-08-31',
+    referencia: 'OP-88213345',
+  } as const;
+
+  /**
+   * Un `FormData` de mentira que **guarda los valores tal cual se cargan**.
+   *
+   * Hace falta porque el `FormData` que hay en Jest es el de Node, y ese
+   * convierte a texto cualquier cosa que no sea un `Blob`: el objeto
+   * `{ uri, type, name }` —que es justamente lo que hay que verificar— llegaría
+   * como `"[object Object]"`. El de React Native, que es el que corre en el
+   * teléfono, lo guarda entero.
+   *
+   * Lo que se prueba acá es **qué carga nuestra función**, que es lo nuestro; de
+   * cómo lo serializa después el runtime se encarga React Native.
+   */
+  class FormDataDePrueba {
+    partes: [string, unknown][] = [];
+
+    append(clave: string, valor: unknown) {
+      this.partes.push([clave, valor]);
+    }
+
+    getAll(clave: string): unknown[] {
+      return this.partes.filter(([k]) => k === clave).map(([, v]) => v);
+    }
+  }
+
+  // `globalThis` y no `global`: el tsconfig no incluye los tipos de Node.
+  const entorno = globalThis as unknown as { FormData: unknown };
+  const original = entorno.FormData;
+
+  beforeAll(() => {
+    entorno.FormData = FormDataDePrueba;
+  });
+
+  afterAll(() => {
+    entorno.FormData = original;
+  });
+
+  function partes(datosDelAviso: Parameters<typeof aCuerpoConComprobante>[0]) {
+    return aCuerpoConComprobante(datosDelAviso, comprobante) as unknown as FormDataDePrueba;
+  }
+
+  /**
+   * ⚠️ **El monto va como número crudo.** En el formulario se escribe
+   * "8.810,50" y eso, tal cual, es un `400`.
+   */
+  it('manda el monto sin formatear', () => {
+    expect(partes(datos).getAll('monto')).toEqual(['8810.5']);
+  });
+
+  /**
+   * ⚠️ **El archivo es `{ uri, type, name }`**, no un `Blob` ni un `File`: así
+   * lo entiende el polyfill de React Native (§4, trampa 1).
+   *
+   * Y `name` lleva **extensión**: sin ella algunos servidores no adivinan el
+   * tipo (trampa 3). El `type` en cambio es orientativo — el backend verifica el
+   * formato real por los primeros bytes (trampa 4).
+   */
+  it('adjunta el archivo con la forma de React Native', () => {
+    expect(partes(datos).getAll('comprobante')).toEqual([
+      {
+        uri: comprobante.archivo,
+        type: 'image/jpeg',
+        name: 'comprobante-1756661331000.jpg',
+      },
+    ]);
+    expect(comprobante.nombre).toMatch(/\.\w+$/);
+  });
+
+  /**
+   * ⚠️ **Sube la copia propia, no el `content://`.** Ese URI vive lo que vive el
+   * intent, y para cuando el cliente termina de loguearse y de elegir la factura
+   * puede haber dejado de servir (§2.3).
+   */
+  it('sube desde la copia propia y no desde el content://', () => {
+    expect(comprobante.archivo.startsWith('file://')).toBe(true);
+  });
+
+  /** Los opcionales vacíos se omiten en vez de viajar en blanco. */
+  it('omite los opcionales que no se cargaron', () => {
+    const cuerpo = partes({ monto: 30000, medio: 'mercado_pago' });
+    expect(cuerpo.getAll('fecha')).toHaveLength(0);
+    expect(cuerpo.getAll('referencia')).toHaveLength(0);
+    expect(cuerpo.getAll('nota')).toHaveLength(0);
+    expect(cuerpo.getAll('medio')).toEqual(['mercado_pago']);
+  });
+
+  /** Un aviso completo carga exactamente estas claves, ni una más. */
+  it('no manda campos de más', () => {
+    expect(partes(datos).partes.map(([clave]) => clave)).toEqual([
+      'monto',
+      'medio',
+      'fecha',
+      'referencia',
+      'comprobante',
+    ]);
+  });
+});
+
+describe('aInformarPagoPayload con comprobante', () => {
+  const valores: InformarPagoFormValues = {
+    monto: '8.810,50',
+    medio: 'transferencia',
+    fecha: '31/08/2026',
+    referencia: 'OP-88213345',
+    nota: '',
+  };
+
+  const comprobante: ComprobanteCompartido = {
+    archivo: 'file:///cache/comprobantes/comprobante-1.jpg',
+    mimeType: 'image/png',
+    nombre: 'comprobante-1.png',
+    recibidoEn: 1756661331000,
+  };
+
+  /**
+   * Es el mismo endpoint de las dos formas: lo único que cambia es que el
+   * cuerpo sale como `multipart` en vez de JSON. Al backend le da igual de dónde
+   * salió la foto.
+   */
+  it('lleva el comprobante al lado de los mismos datos de siempre', () => {
+    const payload = aInformarPagoPayload('fac-1', valores, comprobante);
+    expect(payload.datos.monto).toBe(8810.5);
+    expect(payload.datos.fecha).toBe('2026-08-31');
+    expect(payload.comprobante).toBe(comprobante);
+  });
+
+  /** Sin imagen el payload queda exactamente como antes. */
+  it('sin comprobante no agrega la clave', () => {
+    const payload = aInformarPagoPayload('fac-1', valores);
+    expect('comprobante' in payload).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Cuándo el comprobante es obligatorio
+// (`docs/README_FRONT_COMPROBANTES.md` §1)
+// ─────────────────────────────────────────────────────────────
+describe('comprobanteObligatorio', () => {
+  /**
+   * ⚠️ Esta lista **la valida el backend**: si se desincroniza, el front deja
+   * mandar algo que vuelve con un `400`, o apaga el botón sin motivo. Por eso el
+   * test enumera los cinco medios y no solo los tres que la exigen.
+   */
+  it.each([
+    [MediosDePago.TRANSFERENCIA, true],
+    [MediosDePago.MERCADO_PAGO, true],
+    [MediosDePago.DEPOSITO, true],
+    [MediosDePago.EFECTIVO, false],
+    [MediosDePago.OTRO, false],
+  ])('con %s la exige: %s', (medio, esperado) => {
+    expect(comprobanteObligatorio(medio)).toBe(esperado);
+  });
+
+  /**
+   * El efectivo no deja rastro que se pueda verificar contra el banco, así que
+   * pedirle una captura sería pedir algo que no existe.
+   */
+  it('no la exige en los medios que no dejan comprobante', () => {
+    expect(MEDIOS_CON_COMPROBANTE).not.toContain(MediosDePago.EFECTIVO);
+    expect(MEDIOS_CON_COMPROBANTE).not.toContain(MediosDePago.OTRO);
+  });
+});
+
+describe('MAX_COMPROBANTE_BYTES', () => {
+  /** Son los 8 MB del contrato, no un número redondeado a ojo. */
+  it('son 8 MB exactos', () => {
+    expect(MAX_COMPROBANTE_BYTES).toBe(8388608);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Qué archivo se puede mandar (`docs/README_FRONT_COMPROBANTES.md` §1)
+// ─────────────────────────────────────────────────────────────
+describe('tipoDeComprobanteAceptado', () => {
+  it.each(['image/jpeg', 'image/png', 'image/webp', 'image/heic'])('acepta %s', (tipo) => {
+    expect(tipoDeComprobanteAceptado(tipo)).toBe(true);
+  });
+
+  /**
+   * ⚠️ **`image/jpg` no es un mime real** y aun así está en la lista: hay
+   * proveedores de Android que lo declaran, y rechazar por eso una foto que es un
+   * JPEG perfecto sería un bug difícil de encontrar. Lo mismo con `image/heif`,
+   * que es como algunos teléfonos nombran al HEIC.
+   */
+  it.each(['image/jpg', 'image/heif'])('acepta %s, que es el mismo formato con otro nombre', (t) => {
+    expect(tipoDeComprobanteAceptado(t)).toBe(true);
+  });
+
+  /**
+   * Lo que el cliente puede llegar a mandar sin querer. El PDF está en la lista
+   * de rechazados **a propósito**: el backend no lo guarda, y el que llega por la
+   * hoja de compartir ya viene convertido a JPEG desde el módulo nativo — para
+   * cuando esta función lo ve, un PDF es un PDF que no se convirtió.
+   */
+  it.each([
+    'video/mp4',
+    'video/quicktime',
+    'audio/mpeg',
+    'application/pdf',
+    'application/zip',
+    'image/gif',
+    'image/bmp',
+    'image/svg+xml',
+    'text/plain',
+  ])('rechaza %s', (tipo) => {
+    expect(tipoDeComprobanteAceptado(tipo)).toBe(false);
+  });
+
+  /** Un proveedor puede declararlo en mayúsculas o con parámetros pegados. */
+  it('no se pierde con mayúsculas ni con parámetros', () => {
+    expect(tipoDeComprobanteAceptado('IMAGE/JPEG')).toBe(true);
+    expect(tipoDeComprobanteAceptado('image/png; charset=binary')).toBe(true);
+    expect(tipoDeComprobanteAceptado('  image/webp  ')).toBe(true);
+  });
+
+  it('un tipo vacío o basura no pasa', () => {
+    expect(tipoDeComprobanteAceptado('')).toBe(false);
+    expect(tipoDeComprobanteAceptado('image')).toBe(false);
+    expect(tipoDeComprobanteAceptado('image/')).toBe(false);
+  });
+});
+
+describe('REGLA_DEL_COMPROBANTE', () => {
+  /**
+   * Es lo que se les pasa al picker y al puente de compartir. Que sea **el mismo
+   * objeto** para los dos es el punto: dos listas separadas se desincronizan, y
+   * ahí una entrada acepta lo que la otra rechaza sin que nadie se entere.
+   */
+  it('lleva el tope y los formatos, sin repetirlos', () => {
+    expect(REGLA_DEL_COMPROBANTE.maxBytes).toBe(MAX_COMPROBANTE_BYTES);
+    expect(REGLA_DEL_COMPROBANTE.tiposAceptados).toBe(TIPOS_DE_COMPROBANTE);
+  });
+
+  /** Todos en minúscula: es contra eso que compara el que normaliza. */
+  it('los formatos van normalizados', () => {
+    TIPOS_DE_COMPROBANTE.forEach((tipo) => {
+      expect(tipo).toBe(tipo.toLowerCase());
+      expect(tipoDeComprobanteAceptado(tipo)).toBe(true);
+    });
   });
 });

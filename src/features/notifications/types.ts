@@ -6,10 +6,11 @@ import { z } from 'zod';
  * Son los avisos que le llegan a **quien pregunta**: el endpoint nunca lleva un
  * id de persona, sale de la sesión.
  *
- * Hay cinco tipos y **ninguno lo dispara el sistema solo**: la deuda vencida y
- * los anuncios los manda un administrador a mano, y los tres de pago los
- * disparan las dos puntas de un aviso de pago
- * (`docs/user_cliente_flujo.md` §11).
+ * Hay ocho tipos. Siete los dispara una persona —la deuda vencida y los anuncios
+ * los manda un administrador a mano, los tres de pago los disparan las dos
+ * puntas de un aviso de pago, y los dos de mensajes, las dos puntas del chat—;
+ * el octavo, `store_lleno`, lo publica un cron cuando el almacenamiento se
+ * acerca al límite.
  *
  * ⚠️ **No son notificaciones push.** Esto es la campanita adentro de la app: el
  * teléfono no suena ni muestra nada si la app está cerrada. Para eso hace falta
@@ -20,14 +21,18 @@ import { z } from 'zod';
 // Qué clase de aviso es
 // ─────────────────────────────────────────────────────────────
 /**
- * Los cinco tipos de aviso (`docs/user_cliente_flujo.md` §11).
+ * Los ocho tipos de aviso (`docs/notificaciones.md`).
  *
  * ⚠️ **No todos son para el cliente**: `pago_informado` le llega al
- * administrador, y es el único aviso que dispara un cliente.
+ * administrador —y es el único que dispara un cliente—, y `store_lleno` es del
+ * administrador y de nadie más.
  *
- * El catálogo existe para decidir **a dónde lleva tocar un aviso**, no para
- * dibujarlo: el `titulo` y el `mensaje` ya vienen redactados, así que un tipo
- * que esta versión no conozca se muestra igual y se lee bien — solo no navega.
+ * ⚠️ **El catálogo ya NO decide a dónde lleva tocar un aviso.** Eso lo resuelve
+ * el backend y viaja en `destino` (ver `notificacionSchema`). Los tipos quedan
+ * para lo poco que sigue dependiendo de qué clase de aviso es: qué cache
+ * invalidar al leerlo. Duplicar el mapeo acá es exactamente lo que `destino`
+ * vino a evitar — se desactualiza el día que se agrega un tipo, y nadie se
+ * entera hasta que un clic no lleva a ningún lado.
  */
 export const TiposNotificacion = {
   /** Al cliente: un administrador apretó "avisar deuda". */
@@ -40,6 +45,29 @@ export const TiposNotificacion = {
   PAGO_CONFIRMADO: 'pago_confirmado',
   /** Al cliente: no se le tomó, con el motivo en el `mensaje`. */
   PAGO_RECHAZADO: 'pago_rechazado',
+  /**
+   * **Al administrador**: se está llenando el lugar para comprobantes.
+   *
+   * Es el único que **ningún cliente puede recibir** —el otro lado, el
+   * `pago_informado`, sí lo dispara un cliente— y el único que manda el sistema
+   * solo: lo publica un cron cuando el store se acerca al límite.
+   *
+   * ⚠️ **Vuelve al día siguiente si el problema sigue**, aunque se lo borre. Es a
+   * propósito: el almacenamiento no se arregla descartando el aviso, y callarse
+   * una semana sobre algo urgente porque alguien lo descartó sería peor.
+   */
+  STORE_LLENO: 'store_lleno',
+  /**
+   * **Al administrador**: un cliente escribió al negocio.
+   *
+   * Le llega a **todos** los administradores, como el aviso de pago: quién
+   * atiende la bandeja depende del día. El aviso **pisa en vez de apilarse** —
+   * hay uno vivo por cliente que escribió—, así que diez mensajes seguidos de la
+   * misma persona son un aviso que dice "(10)", no diez avisos.
+   */
+  MENSAJE_DEL_CLIENTE: 'mensaje_del_cliente',
+  /** Al cliente: el local le escribió, contestando o empezando. */
+  MENSAJE_DEL_NEGOCIO: 'mensaje_del_negocio',
 } as const;
 
 export type TipoNotificacion = (typeof TiposNotificacion)[keyof typeof TiposNotificacion];
@@ -87,6 +115,48 @@ export const PARAMS_GLOBITO = { pagina: 1, limite: 1 } as const;
 // ─────────────────────────────────────────────────────────────
 // Respuestas de la API
 // ─────────────────────────────────────────────────────────────
+/**
+ * **A dónde lleva tocar un aviso**, resuelto por el backend
+ * (`docs/notificaciones.md`).
+ *
+ * | `pantalla` | Es de | Qué abre | `id` |
+ * |---|---|---|---|
+ * | `mis_facturas` | cliente | La lista de sus facturas | siempre `null` |
+ * | `una_factura` | cliente | Una factura | el id de la **factura** |
+ * | `bandeja_de_pagos` | administrador | La bandeja de avisos de pago | el id del **aviso** |
+ * | `store_de_comprobantes` | administrador | El panel del almacenamiento | siempre `null` |
+ * | `mis_mensajes` | cliente | Su hilo con el local | siempre `null` |
+ * | `bandeja_de_mensajes` | administrador | El hilo de un cliente | el id del **cliente** |
+ *
+ * ⚠️ **`pantalla` se valida como texto libre, no como enum.** Una versión más
+ * nueva del backend puede mandar una pantalla que esta build no conoce, y eso no
+ * puede tirar abajo la lista entera: el aviso se lee igual, solo no navega.
+ *
+ * ⚠️ **`id` puede venir `null` en una pantalla que normalmente lo lleva**: son
+ * los avisos guardados antes de que `datos` trajera ese campo. Ahí se cae en la
+ * pantalla sin nada abierto —la lista de facturas, la bandeja completa— en vez
+ * de romper.
+ */
+export const PantallasDeAviso = {
+  MIS_FACTURAS: 'mis_facturas',
+  UNA_FACTURA: 'una_factura',
+  BANDEJA_DE_PAGOS: 'bandeja_de_pagos',
+  STORE_DE_COMPROBANTES: 'store_de_comprobantes',
+  /** El chat del cliente con el negocio. **Es uno solo: nunca lleva id.** */
+  MIS_MENSAJES: 'mis_mensajes',
+  /** La bandeja de mensajes del panel: el `id` es **el cliente**, no el mensaje. */
+  BANDEJA_DE_MENSAJES: 'bandeja_de_mensajes',
+} as const;
+
+export type PantallaDeAviso = (typeof PantallasDeAviso)[keyof typeof PantallasDeAviso];
+
+export const destinoSchema = z.object({
+  pantalla: z.string(),
+  id: z.string().nullish(),
+});
+
+export type DestinoDeAviso = z.infer<typeof destinoSchema>;
+
 /** Un aviso. */
 export const notificacionSchema = z.object({
   id: z.string(),
@@ -118,6 +188,19 @@ export const notificacionSchema = z.object({
    * fechado; de acá sale el id de la factura, y nada más.
    */
   datos: z.unknown().nullish(),
+
+  /**
+   * **A dónde lleva el clic.** `null` es un aviso que no abre nada —un anuncio
+   * es texto y nada más—.
+   *
+   * ⚠️ Lo resuelve **el backend**, y por eso la app no mira el `tipo` para
+   * navegar: duplicar ese mapeo acá se desactualiza el día que se agrega un tipo
+   * nuevo, y nadie se entera hasta que un clic no lleva a ningún lado.
+   *
+   * ⚠️ Es `nullish` y no obligatorio también por los avisos viejos, anteriores a
+   * que este campo existiera: se leen igual, solo no navegan.
+   */
+  destino: destinoSchema.nullish(),
 });
 
 /**
@@ -143,9 +226,21 @@ export const leerTodasSchema = z.object({
   leidas: z.number(),
 });
 
+/** Lo que devuelve borrar uno. Idempotente: borrarlo dos veces dice lo mismo. */
+export const borradaSchema = z.object({
+  borrada: z.boolean(),
+});
+
+/** Lo que devuelve vaciar la campanita: cuántas se fueron. */
+export const borradasSchema = z.object({
+  borradas: z.number(),
+});
+
 export type Notificacion = z.infer<typeof notificacionSchema>;
 export type NotificacionesPagina = z.infer<typeof notificacionesPaginaSchema>;
 export type LeerTodasRespuesta = z.infer<typeof leerTodasSchema>;
+export type BorradaRespuesta = z.infer<typeof borradaSchema>;
+export type BorradasRespuesta = z.infer<typeof borradasSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // Params que viajan a la API
@@ -214,36 +309,26 @@ export function esPagoResuelto(notificacion: Notificacion): boolean {
 /**
  * A dónde lleva tocar un aviso, o `null` si no lleva a ningún lado.
  *
- * Es un **dato y no una navegación**: la feature de avisos no conoce los nombres
- * de las rutas, y la pantalla, que sí, lo traduce en una línea. Así este mapa se
- * lee y se testea sin montar un navigator.
- */
-export type DestinoDeAviso =
-  | { destino: 'factura'; facturaId: string }
-  | { destino: 'facturas-vencidas' };
-
-/**
- * Qué abrir al tocar un aviso (`docs/user_cliente_flujo.md` §11).
+ * ⚠️ **Sale del `destino` que manda el backend**, no del `tipo`. Antes se
+ * deducía acá con un `switch`, y el doc pide expresamente que no: duplicado del
+ * lado de la app, ese mapeo se desactualiza el día que se agrega un tipo nuevo
+ * —`store_lleno` fue justamente ese día— y nadie se entera hasta que un clic no
+ * lleva a ningún lado.
  *
- * ⚠️ **Se elige por `tipo`, nunca por qué campos trae `datos`.**
- *
- * Tres no llevan a ningún lado, y cada uno por su motivo:
- *
- * - `anuncio` no habla de nada en particular.
- * - `pago_informado` es el aviso que le llega **al administrador**, y su bandeja
- *   todavía no existe en la app.
- * - Un tipo que esta versión no conoce: el texto ya viene redactado y se lee
- *   igual, pero adivinar un destino sería peor que no moverse.
+ * Sigue siendo un **dato y no una navegación**: esta feature no conoce los
+ * nombres de las rutas, y la pantalla, que sí, traduce `pantalla` a ruta en un
+ * solo mapa.
  */
 export function destinoDeAviso(notificacion: Notificacion): DestinoDeAviso | null {
-  if (notificacion.tipo === TiposNotificacion.DEUDA_VENCIDA) {
-    return { destino: 'facturas-vencidas' };
-  }
+  return notificacion.destino ?? null;
+}
 
-  if (esPagoResuelto(notificacion)) {
-    const datos = datosDePagoDe(notificacion);
-    return datos ? { destino: 'factura', facturaId: datos.facturaId } : null;
-  }
-
-  return null;
+/**
+ * `true` si tocarlo abre algo.
+ *
+ * Es lo que decide si la fila se dibuja como **tocable**: un aviso que parece un
+ * botón y no hace nada se siente roto, y un anuncio que se ve como texto, no.
+ */
+export function llevaAAlgunLado(notificacion: Notificacion): boolean {
+  return Boolean(notificacion.destino?.pantalla);
 }

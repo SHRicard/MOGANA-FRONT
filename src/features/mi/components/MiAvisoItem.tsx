@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import Check from 'lucide-react-native/icons/check';
 import Hourglass from 'lucide-react-native/icons/hourglass';
 import X from 'lucide-react-native/icons/x';
@@ -23,6 +23,8 @@ export interface MiAvisoItemProps {
 }
 
 const ICON_SIZE = 16;
+/** Alto de la miniatura del comprobante: se reconoce sin dominar la tarjeta. */
+const MINIATURA_ALTO = 120;
 
 /** El tono de cada estado, con el mismo semáforo del resto de la app. */
 const TONO: Record<EstadoDeAviso, EstadoTono> = {
@@ -55,6 +57,13 @@ const COLOR_ICONO: Record<EstadoDeAviso, keyof ThemeColors> = {
  * diferencia es exactamente lo que explica por qué el saldo no bajó lo esperado.
  *
  * ⚠️ El saldo que muestra la factura es el de **hoy**, no el de cuando avisó.
+ *
+ * ⚠️ **La miniatura del comprobante se dibuja del link firmado que vino en esta
+ * respuesta, y ese link caduca en una hora**
+ * (`docs/compartir_comprobante.md` §7). No se guarda en ningún lado: se usa al
+ * renderizar y se tira. Si la pantalla estuvo abierta mucho rato el link ya
+ * venció, y la forma de recuperarlo es **volver a pedir la lista** —el gesto de
+ * tirar para abajo de `MisAvisosScreen`—, no reintentar la imagen.
  */
 function MiAvisoItemComponent({ aviso, onPress }: MiAvisoItemProps) {
   const theme = useTheme();
@@ -64,6 +73,14 @@ function MiAvisoItemComponent({ aviso, onPress }: MiAvisoItemProps) {
 
   const Icono = ICONO[aviso.estado];
   const distinto = seAnotoDistinto(aviso);
+
+  /**
+   * El link se venció mientras la pantalla estaba abierta, o el comprobante
+   * todavía se está guardando. Se dice qué hacer en vez de dejar un cuadrado
+   * gris: lo que arregla esto es recargar la lista, no reintentar la imagen.
+   */
+  const [miniaturaCaida, setMiniaturaCaida] = useState(false);
+  const miniatura = aviso.comprobante?.miniatura ?? aviso.comprobante?.url ?? null;
 
   return (
     <Pressable
@@ -118,6 +135,25 @@ function MiAvisoItemComponent({ aviso, onPress }: MiAvisoItemProps) {
         </View>
       ) : null}
 
+      {/* El comprobante que se adjuntó, si el aviso vino con uno. */}
+      {miniatura ? (
+        miniaturaCaida ? (
+          <Text variant="caption" color="textMuted">
+            Tirá para abajo para volver a ver tu comprobante.
+          </Text>
+        ) : (
+          <Image
+            source={{ uri: miniatura }}
+            style={styles.miniatura}
+            resizeMode="cover"
+            onError={() => setMiniaturaCaida(true)}
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel="Comprobante que adjuntaste"
+          />
+        )
+      ) : null}
+
       {aviso.referencia ? (
         <Text variant="caption" color="textMuted" numberOfLines={1}>
           {`Referencia: ${aviso.referencia}`}
@@ -156,6 +192,14 @@ const createStyles = (theme: Theme) =>
     motivo: {
       padding: theme.spacing.sm,
       backgroundColor: theme.colors.errorMuted,
+      borderRadius: theme.radius.md,
+    },
+
+    /** Chica: acá alcanza con reconocer cuál se mandó, no con leerla. */
+    miniatura: {
+      width: '100%',
+      height: MINIATURA_ALTO,
+      backgroundColor: theme.colors.surfaceVariant,
       borderRadius: theme.radius.md,
     },
   });

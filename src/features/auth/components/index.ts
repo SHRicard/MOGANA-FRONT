@@ -1,4 +1,5 @@
 export { AuthScreenLayout } from './AuthScreenLayout';
+export { AvisoDeCuentaDadaDeBaja } from './AvisoDeCuentaDadaDeBaja';
 export { FormErrorBanner } from './FormErrorBanner';
 export { GoogleSignInButton } from './GoogleSignInButton';
 export { GoogleLogo } from './GoogleLogo';

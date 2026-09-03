@@ -1,6 +1,15 @@
 import { baseApi } from '@/services/api';
 import { setUser, toUser } from '@/features/auth';
-import { perfilSchema, type ActualizarPerfilPayload, type Perfil } from '../types';
+import {
+  bajaHechaSchema,
+  perfilSchema,
+  vistaPreviaDeBajaSchema,
+  type ActualizarPerfilPayload,
+  type BajaHecha,
+  type DarDeBajaPayload,
+  type Perfil,
+  type VistaPreviaDeBaja,
+} from '../types';
 
 /**
  * La cuenta propia. Sirve para **cualquier rol** y nunca lleva un id: sale de la
@@ -66,7 +75,54 @@ export const perfilApi = baseApi.injectEndpoints({
        */
       invalidatesTags: ['User', 'Factura'],
     }),
+
+    /**
+     * `GET /api/users/me/baja` — **qué va a pasar si se da de baja. No borra
+     * nada** (`docs/README_FRONT_BAJA_DE_CUENTA.md` §3).
+     *
+     * ⚠️ Lo que devuelve no es una cortesía de UX: es **el aviso que la política
+     * de Google Play obliga a mostrar** —qué datos se retienen y por qué—, y por
+     * eso los seis textos vienen escritos del servidor y se muestran tal cual.
+     *
+     * ⚠️ **No provee ni consume el tag `User`.** Se pide al entrar a la pantalla
+     * y una sola vez: la deuda puede cambiar entre que se mira y se confirma, y
+     * el que decide de verdad es el `DELETE`, que la vuelve a calcular. Colgarlo
+     * del tag haría que un refetch de la sesión reescriba el cartel que la
+     * persona está leyendo.
+     */
+    getVistaPreviaDeBaja: builder.query<VistaPreviaDeBaja, void>({
+      query: () => ({ url: '/users/me/baja', method: 'GET' }),
+      responseSchema: vistaPreviaDeBajaSchema,
+    }),
+
+    /**
+     * `DELETE /api/users/me` — **el borrado** (§4).
+     *
+     * ⚠️ **Lleva body**, y hay clientes HTTP y proxies que lo tiran; si eso
+     * pasara, el resultado es el `400` de *"Para confirmar, escribí ELIMINAR."*
+     * — el lado correcto por el que fallar. En React Native el `fetch` de
+     * `fetchBaseQuery` lo manda bien.
+     *
+     * ⚠️ **No invalida ningún tag, y es lo importante de este endpoint.** El
+     * token dejó de servir en el mismo request: cualquier refetch que disparara
+     * una invalidación volvería con `401` y la persona vería un error donde
+     * tendría que ver una despedida. La sesión la cierra la pantalla, después de
+     * mostrar el mensaje.
+     *
+     * Errores: `400` si la palabra no coincide, `409` si la cuenta es de
+     * administración (*"Las cuentas del negocio no se dan de baja desde acá"*),
+     * `401` si el token ya no sirve — un doble toque.
+     */
+    darDeBaja: builder.mutation<BajaHecha, DarDeBajaPayload>({
+      query: (body) => ({ url: '/users/me', method: 'DELETE', body }),
+      responseSchema: bajaHechaSchema,
+    }),
   }),
 });
 
-export const { useGetMiPerfilQuery, useActualizarMiCuentaMutation } = perfilApi;
+export const {
+  useGetMiPerfilQuery,
+  useActualizarMiCuentaMutation,
+  useGetVistaPreviaDeBajaQuery,
+  useDarDeBajaMutation,
+} = perfilApi;
